@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-import { ThickGridHelper } from './ThickGridHelper';
+//import { ThickGridHelper } from './ThickGridHelper';
 
 // Scene
 const scene = new THREE.Scene();
