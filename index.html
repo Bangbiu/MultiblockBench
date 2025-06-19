@@ -4,17 +4,18 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MultiblockBench</title>
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
-      canvas {
-        display: block;
-      }
-    </style>
+    <link rel="stylesheet" href="style.css" />
   </head>
+
   <body>
+    <!-- Menu Panel -->
+    <div id="menu">
+      <h1>MultiblockBench</h1>
+      <button onclick="document.getElementById('objLoader').click()">Load OBJ</button>
+      <input type="file" id="objLoader" accept=".obj" />
+    </div>
+
+    <!-- Three.js Script -->
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

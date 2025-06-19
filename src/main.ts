@@ -1,76 +1,87 @@
-import * as THREE from 'three';
-import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
-//import { ThickGridHelper } from './ThickGridHelper';
-
-// Scene
-const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x222222);
-
-// Camera
-const camera = new THREE.PerspectiveCamera(
-  75,
-  window.innerWidth / window.innerHeight,
-  0.01,
-  1000
-);
-camera.position.set(-12,26,-16);
-camera.lookAt(new THREE.Vector3(0,0,0));
-
-// Renderer
-const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
-document.body.appendChild(renderer.domElement);
+import { FullScreenCamera, FullScreenRenderer, ModelOrbitalControl } from './scene/FullScreenRender';
+import { BenchGrid, DefaultBlock } from './scene/BenchGrid';
+import { BenchLighting } from './scene/BenchLighting';
+import { BenchModel } from './scene/BenchModel';
+import { Color, Raycaster, Scene, Vector2 } from 'three';
 
 
-// Controls
-const controls = new OrbitControls(camera, renderer.domElement);
-//controls.enableDamping = true;
-//controls.dampingFactor = 0.05;
-controls.target.set(0, 0, 0); // rotate around the origin
-controls.update();
+class App {
+    public readonly renderer: FullScreenRenderer;
+    public readonly camera: FullScreenCamera;
+    public readonly orbitalControl: ModelOrbitalControl;
 
-//const thickGrid = new ThickGridHelper(160, 10, 0xffffff, 0.03);
-//scene.add(thickGrid);
+    public readonly raycaster: Raycaster;
+    public readonly mouse: Vector2;
+    public readonly models: BenchModel[];
 
-// Add a grid helper on the XZ plane (like ground)
-const gridHelper = new THREE.GridHelper(160, 160, 0x555555, 0x555555);
-//gridHelper.scale.set(1, 1, 1);
-scene.add(gridHelper);
-const gridHelper2 = new THREE.GridHelper(160, 10, 0xFFFFFF, 0xFFFFFF);
-scene.add(gridHelper2);
+    public readonly scene: Scene;
 
-// Add axes helper to visualize X, Y, Z
-const axesHelper = new THREE.AxesHelper(80); // length of axes
-scene.add(axesHelper);
+    constructor() {
+        this.renderer = new FullScreenRenderer();
+        this.camera = new FullScreenCamera();
+        this.orbitalControl = new ModelOrbitalControl(this.camera, this.renderer);
+        // Scene
+        this.scene = this.createScene();
+        // Interaction
+        this.raycaster = new Raycaster();
+        this.mouse = new Vector2();
+        // Objects
+        this.models = [];
+    }
 
-// Cube
-const geometry = new THREE.BoxGeometry();
-const material = new THREE.MeshStandardMaterial({ color: 0x00ff88 });
-const cube = new THREE.Mesh(geometry, material);
-cube.position.add(new THREE.Vector3(8,8,8));
-cube.scale.set(16, 16, 16);
-scene.add(cube);
+    public init(): void {
+        this.createMenu();
+        this.createScene();
+        this.registerEvents();
+    }
 
-// Light
-const light = new THREE.DirectionalLight(0xffffff, 1);
-light.position.set(2, 2, 5);
-scene.add(light);
+    public createScene(): Scene {
+        const scene = new Scene();
+        scene.background = new Color(0x222222);
+        scene.add(new BenchGrid());
+        //scene.add(new DefaultBlock());
+        scene.add(new BenchLighting());
+        return scene;
+    }
 
-const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // color, intensity
-scene.add(ambientLight);
+    public createMenu(): void {
+        const objInput = document.getElementById("objLoader") as HTMLInputElement;
+        objInput.addEventListener("change", () => {
+            const file = objInput.files?.[0];
+            if (!file) return;
+            const model: BenchModel = new BenchModel(file);
+            this.scene.add(model);
+            this.models.push(model);
+        });
+    }
 
-// Animate
-function animate(): void {
-  requestAnimationFrame(animate);
-  //cube.rotation.x += 0.01;
-  //cube.rotation.y += 0.01;
-  renderer.render(scene, camera);
+    public registerEvents(): void {
+        document.addEventListener('click', (event) => {
+            // convert mouse to normalized device coords
+            this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
+            this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+
+            this.raycaster.setFromCamera(this.mouse, this.camera);
+
+            for (const model of this.models) {
+                const hit = model.intersects(this.raycaster);
+                model.toggleHighlight(hit); // toggle highlight on click
+            }
+        });
+    }
+
+    public update(): void {
+        this.renderer.render(this.scene, this.camera);
+    }
 }
-animate();
 
-// Handle window resize
-window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
-  camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
-});
+const app = new App();
+app.init();
+
+
+function loop(): void {
+    app.update();
+    requestAnimationFrame(loop);
+}
+
+loop();
