@@ -12,7 +12,8 @@ class App {
 
     public readonly raycaster: Raycaster;
     public readonly mouse: Vector2;
-    public readonly models: BenchModel[];
+    public readonly models: Set<BenchModel>;
+    public readonly selected: Set<BenchModel>;
 
     public readonly scene: Scene;
 
@@ -26,7 +27,8 @@ class App {
         this.raycaster = new Raycaster();
         this.mouse = new Vector2();
         // Objects
-        this.models = [];
+        this.models = new Set<BenchModel>();
+        this.selected = new Set<BenchModel>();
     }
 
     public init(): void {
@@ -50,28 +52,66 @@ class App {
             const file = objInput.files?.[0];
             if (!file) return;
             const model: BenchModel = new BenchModel(file);
+            this.models.add(model);
             this.scene.add(model);
-            this.models.push(model);
+            
+            // Enable Multiple Loading of Same File
+            objInput.value = "";
         });
     }
 
     public registerEvents(): void {
-        document.addEventListener('click', (event) => {
+        // Mouse
+        document.addEventListener('mousedown', (event) => {
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             this.raycaster.setFromCamera(this.mouse, this.camera);
+            const interacted = this.getInteracted();
+            
+            if (null != interacted) {
+                if (false == event.ctrlKey) {
+                    // Single Selection
+                    for (const model of this.selected) {
+                        model.setHighlight(false);
+                    }
+                    this.selected.clear();
+                    interacted.setHighlight(true);
+                    this.selected.add(interacted);
+                } else {
+                    if (interacted.toggleHighlight()) {
+                        this.selected.add(interacted);
+                    } else {
+                        this.selected.delete(interacted);
+                    }
+                }
+            }
 
-            for (const model of this.models) {
-                const hit = model.intersects(this.raycaster);
-                model.toggleHighlight(hit); // toggle highlight on click
+        });
+
+        //KeyBoard
+        document.addEventListener('keyup', (event) => {
+            if (event.key === 'Delete') {
+                for (const model of this.selected) {
+                    this.scene.remove(model);
+                    this.models.delete(model);
+                }
+                this.selected.clear();
             }
         });
     }
 
     public update(): void {
         this.renderer.render(this.scene, this.camera);
+    }
+
+    private getInteracted(): BenchModel | null {
+        for (const model of this.models) {
+            const hit = model.intersects(this.raycaster);
+            if (hit) return model;
+        }
+        return null;
     }
 }
 

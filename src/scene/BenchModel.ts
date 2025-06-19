@@ -3,7 +3,7 @@ import { OBJLoader } from 'three-stdlib';
 
 class BenchModel extends Group {
     private mesh: Object3D | null = null;
-    private highlightEdge: Group | null = null;
+    private edges: Group | null = null;
     public selected = false;
 
     constructor(file: File) {
@@ -11,7 +11,7 @@ class BenchModel extends Group {
         this.fromFile(file);
     }
 
-    public async fromFile(file: File) {
+    private async fromFile(file: File) {
         const objText = await readFileAsText(file);
         this.mesh = new OBJLoader().parse(objText);
         // Resize to Fit Grid
@@ -19,35 +19,38 @@ class BenchModel extends Group {
         this.add(this.mesh);
     }
 
-    public toggleHighlight(state: boolean) {
-        if (!this.mesh) return;
-        if (state && !this.highlightEdge) {
-            // Create edge lines
-            const allEdges = new Group();
-
-            this.mesh.traverse((child) => {
-                if ((child as Mesh).isMesh) {
-                    const mesh = child as     Mesh;
-                    const edges = new EdgesGeometry(mesh.geometry);
-                    const line = new LineSegments(
-                        edges,
-                        new LineBasicMaterial({ color: 0xffff00 })
-                    );
-                    line.matrixAutoUpdate = false;
-                    line.applyMatrix4(mesh.matrixWorld);
-                    allEdges.add(line);
-                }
-            });
-
-            this.highlightEdge = allEdges;
-            this.add(this.highlightEdge);
+    private createEdges(): void {
+        // Lazy Loading
+        if (this.edges != null || this.mesh == null) return;
+        const edgeMeshes = new Group();
+        for (const child of this.mesh.children) {
+            const mesh = child as Mesh;
+            if (mesh.isMesh) {
+                const edges = new EdgesGeometry(mesh.geometry);
+                const line = new LineSegments(
+                    edges,
+                    new LineBasicMaterial({ color: 0xffff00 })
+                );
+                line.matrixAutoUpdate = false;
+                line.applyMatrix4(mesh.matrixWorld);
+                edgeMeshes.add(line);
+            }
         }
+        this.edges = edgeMeshes;
+        this.add(this.edges);
+    }
 
-        if (this.highlightEdge) {
-            this.highlightEdge.visible = state;
-        }
+    public toggleHighlight(): boolean {
+        if (!this.mesh) return false;
+        this.selected = !this.selected;
+        return this.setHighlight(this.selected);
+    }
 
-        this.selected = state;
+    public setHighlight(state: boolean): boolean {
+        if (!this.mesh) return false;
+        this.createEdges();
+        (this.edges as Group).visible = state;
+        return state;
     }
 
     public intersects(raycaster: Raycaster): boolean {
