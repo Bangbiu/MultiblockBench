@@ -4,19 +4,23 @@ import { BenchLighting } from './scene/BenchLighting';
 import { BenchModel } from './scene/BenchModel';
 import { Color, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
-
+import { LoadingUI } from './gui/Loading';
 
 class App {
+    // Render
     public readonly renderer: FullScreenRenderer;
     public readonly camera: FullScreenCamera;
     public readonly orbitalControl: ModelOrbitalControl;
-
+    public readonly scene: Scene;
+    // Data
     public readonly raycaster: Raycaster;
     public readonly mouse: Vector2;
     public readonly models: Set<BenchModel>;
     public readonly selected: Set<BenchModel>;
 
-    public readonly scene: Scene;
+    public readonly objFileInput: HTMLInputElement;
+    // GUI
+    public readonly loadingUI: LoadingUI;
 
     constructor() {
         this.renderer = new FullScreenRenderer();
@@ -30,10 +34,12 @@ class App {
         // Objects
         this.models = new Set<BenchModel>();
         this.selected = new Set<BenchModel>();
+        this.objFileInput = document.getElementById("objLoader") as HTMLInputElement;
+        // GUI
+        this.loadingUI = new LoadingUI();
     }
 
     public init(): void {
-        this.createMenu();
         this.createScene();
         this.registerEvents();
     }
@@ -47,19 +53,6 @@ class App {
         return scene;
     }
 
-    public createMenu(): void {
-        const objInput = document.getElementById("objLoader") as HTMLInputElement;
-        objInput.addEventListener("change", () => {
-            const arrangedList = FileUtil.arrangeObjMtl(objInput.files);
-            if (!arrangedList) return;
-            const model: BenchModel = new BenchModel(arrangedList);
-            this.models.add(model);
-            this.scene.add(model);
-            // Enable Multiple Loading of Same File
-            objInput.value = "";
-        });
-    }
-
     public registerEvents(): void {
         // Mouse
         document.addEventListener('mousedown', (event) => {
@@ -69,7 +62,7 @@ class App {
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
 
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            const interacted = this.getInteracted();
+            const interacted = this.getInteracting();
             
             if (null != interacted) {
                 if (false == event.ctrlKey) {
@@ -91,7 +84,7 @@ class App {
 
         });
 
-        //KeyBoard
+        // KeyBoard
         document.addEventListener('keyup', (event) => {
             if (event.key === 'Delete') {
                 for (const model of this.selected) {
@@ -101,13 +94,24 @@ class App {
                 this.selected.clear();
             }
         });
+
+        // Menu
+        this.objFileInput.addEventListener("change", () => {
+            const arrangedList = FileUtil.arrangeObjMtl(this.objFileInput.files);
+            if (!arrangedList) return;
+            const model: BenchModel = BenchModel.load(arrangedList, this.loadingUI);
+            this.models.add(model);
+            this.scene.add(model);
+            // Enable Multiple Loading of Same File
+            this.objFileInput.value = "";
+        });
     }
 
     public update(): void {
         this.renderer.render(this.scene, this.camera);
     }
 
-    private getInteracted(): BenchModel | null {
+    private getInteracting(): BenchModel | null {
         for (const model of this.models) {
             const hit = model.intersects(this.raycaster);
             if (hit) return model;

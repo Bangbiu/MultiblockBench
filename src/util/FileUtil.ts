@@ -1,5 +1,6 @@
-import { LoadingManager, Group } from "three";
+import { LoadingManager, Group, Mesh, MeshPhongMaterial, Color } from "three";
 import { MTLLoader, OBJLoader, type MaterialCreator } from "three-stdlib";
+import type { LoadingUI } from "../gui/Loading";
 
 type OptFile = File | undefined;
 type ArrangedFiles = [File, OptFile, ...File[]]
@@ -7,6 +8,17 @@ type ArrangedFiles = [File, OptFile, ...File[]]
 class FileUtil {
     public static readonly OBJ_EXT: string = 'obj';
     public static readonly MTL_EXT: string = 'mtl';
+    public static readonly DEF_MAT: MeshPhongMaterial = 
+            new MeshPhongMaterial({ 
+                color: 0xffffff,
+                shininess: 150,         
+                specular: new Color(0xaaaaaa),
+            });;
+
+
+    public static getFileName(url: string): string {
+        return url.split('/').pop()!
+    }
 
     public static getFileExtension(file: File): string {
         const parts = file.name.split('.');
@@ -35,13 +47,19 @@ class FileUtil {
         return [objFile, mtlFile, ...fileArr];
     }
 
-    public static async loadObj(fileList: ArrangedFiles): Promise<Group> {
+    public static async loadObj(fileList: ArrangedFiles, loadingUI: LoadingUI | null = null): Promise<Group> {
         const objFile: File = fileList[0];
         const mtlFile: OptFile = fileList[1]; 
         const textureFiles: Array<File> = fileList.slice(2) as Array<File>;
         const manager = new LoadingManager();
         const objLoader = new OBJLoader(manager);
-        console.log(fileList);
+        //console.log(fileList);
+        if (loadingUI) {
+            // Binding UI
+            manager.onStart = loadingUI.onStart;
+            manager.onProgress = loadingUI.onProgress;
+            manager.onLoad = loadingUI.onLoad;
+        }
         
         if (mtlFile) {
             // Found Material File
@@ -59,9 +77,10 @@ class FileUtil {
 
             // Intercept texture loading
             manager.setURLModifier((url) => {
-                const fileName = url.split('/').pop()!;
+                const fileName = FileUtil.getFileName(url);
                 return textureMap.get(fileName) || url;
             });
+
 
             const mtlLoader = new MTLLoader(manager);
             mtlLoader.setResourcePath('./');
@@ -88,6 +107,13 @@ class FileUtil {
             console.log("No mtllib reference found in the OBJ file.");
             const objText = await FileUtil.readFileAsText(objFile);
             const loadedObj = objLoader.parse(objText);
+            // Apply the material to all meshes in the group
+            loadedObj.traverse((child) => {
+                if ((child as Mesh).isMesh) {
+                    const mesh = child as Mesh;
+                    mesh.material = FileUtil.DEF_MAT;
+                }
+            });
             // Resize to Fit Grid
             loadedObj.scale.set(16, 16, 16);
             return loadedObj;

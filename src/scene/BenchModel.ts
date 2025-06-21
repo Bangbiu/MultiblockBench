@@ -11,18 +11,29 @@ import {
 import { mergeVertices } from 'three-stdlib';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
+import type { LoadingUI } from '../gui/Loading';
 
 class BenchModel extends Group {
     private mesh: Group | null = null;
     private edges: Object3D | null = null;
     public selected = false;
 
-    constructor(fileList: ArrangedFiles) {
+    constructor(loadedObj: Group | null = null) {
         super();
-        FileUtil.loadObj(fileList).then((obj) => { 
-            this.mesh = obj;
-            this.add(this.mesh);
-        });
+        if (loadedObj) this.setMesh(loadedObj);
+    }
+
+    public setMesh(loadedObj: Group): void {
+        this.clearMesh();
+        this.mesh = loadedObj;
+        this.add(this.mesh);
+    }
+
+    public clearMesh(): void {
+        if (this.mesh) {
+            this.remove(this.mesh);
+            this.mesh = null;
+        }
     }
 
     private createWireframe(): void{
@@ -43,7 +54,7 @@ class BenchModel extends Group {
 
         // 4. Set render order to draw on top
         wireframe.renderOrder = 1;
-        wireframe.material.depthTest = false; // makes it draw over the mesh
+        //wireframe.material.depthTest = false; // makes it draw over the mesh
         this.edges = wireframe;
         this.add(this.edges);
     }
@@ -65,6 +76,14 @@ class BenchModel extends Group {
         if (!this.mesh) return false;
         const intersects = raycaster.intersectObject(this.mesh, true);
         return intersects.length > 0;
+    }
+
+    public static load(fileList: ArrangedFiles, loadingUI: LoadingUI | null = null): BenchModel {
+        const model = new BenchModel();
+        FileUtil.loadObj(fileList, loadingUI).then((obj) => { 
+            model.setMesh(obj);
+        });
+        return model;
     }
 }
 
