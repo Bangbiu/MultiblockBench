@@ -11,11 +11,11 @@ canvas {
   position: absolute;
   top: 0;
   left: 0;
-  width: 200px;
+  width: 80px;
   height: 100vh;
   background-color: rgba(0, 0, 0, 0.7);
   color: white;
-  padding: 20px;
+  padding: 15px;
   box-sizing: border-box;
   font-family: sans-serif;
   z-index: 10;
@@ -29,14 +29,15 @@ canvas {
 #menu button {
   display: block;
   width: 100%;
-  margin-bottom: 10px;
-  padding: 10px;
-  font-size: 14px;
+  aspect-ratio: 1 / 1; /* Makes height = width */
+  margin-bottom: 20px;
+  font-size: 24px;
   background-color: #1e90ff;
   border: none;
   color: white;
   cursor: pointer;
   border-radius: 4px;
+  padding: 0; /* Remove padding to maintain square shape */
 }
 
 #menu button:hover {
@@ -45,4 +46,36 @@ canvas {
 
 #objLoader {
   display: none;
+}
+
+#toolBar {
+  position: absolute;
+  top: 0;
+  right: 0;
+  width: 80px;
+  height: 100vh;
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 15px;
+  box-sizing: border-box;
+  font-family: sans-serif;
+  z-index: 10;
+}
+
+#toolBar button {
+  display: block;
+  width: 100%;
+  aspect-ratio: 1 / 1; /* Makes height = width */
+  margin-bottom: 20px;
+  font-size: 24px;
+  background-color: #1e90ff;
+  border: none;
+  color: white;
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0; /* Remove padding to maintain square shape */
+}
+
+#toolBar button:hover {
+  background-color: #3399ff;
 }

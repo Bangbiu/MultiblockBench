@@ -5,14 +5,31 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>MultiblockBench</title>
     <link rel="stylesheet" href="style.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   </head>
 
   <body>
     <!-- Menu Panel -->
     <div id="menu">
-      <h1>MultiblockBench</h1>
-      <button onclick="document.getElementById('objLoader').click()">Load OBJ</button>
-      <input type="file" id="objLoader" accept=".obj" />
+      <button onclick="document.getElementById('objLoader').click()">
+        <i class="fas fa-file-import"></i>
+      </button>
+
+      <button>
+        <i class="fa-solid fa-download"></i>
+      </button>
+
+      <input type="file" id="objLoader" multiple/>
+    </div>
+
+    <!-- Tool Bar -->
+    <div id="toolBar">
+      <button>
+        <i class="fa-solid fa-plane"></i>
+      </button>
+      <button>
+        <i class="fa-solid fa-download"></i>
+      </button>
     </div>
 
     <!-- Three.js Script -->

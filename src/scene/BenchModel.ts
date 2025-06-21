@@ -1,55 +1,63 @@
-import { Object3D, Group, Mesh, EdgesGeometry, LineSegments, LineBasicMaterial, Raycaster } from 'three';
-import { OBJLoader } from 'three-stdlib';
+import { 
+    Object3D, 
+    Group, 
+    Mesh, 
+    LineSegments, 
+    LineBasicMaterial, 
+    Raycaster, 
+    BufferGeometry, 
+    WireframeGeometry
+} from 'three';
+import { mergeVertices } from 'three-stdlib';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 
 class BenchModel extends Group {
-    private mesh: Object3D | null = null;
-    private edges: Group | null = null;
+    private mesh: Group | null = null;
+    private edges: Object3D | null = null;
     public selected = false;
 
-    constructor(file: File) {
+    constructor(fileList: ArrangedFiles) {
         super();
-        this.fromFile(file);
+        FileUtil.loadObj(fileList).then((obj) => { 
+            this.mesh = obj;
+            this.add(this.mesh);
+        });
     }
 
-    private async fromFile(file: File) {
-        const objText = await readFileAsText(file);
-        this.mesh = new OBJLoader().parse(objText);
-        // Resize to Fit Grid
-        this.mesh.scale.set(16, 16, 16);
-        this.add(this.mesh);
-    }
-
-    private createEdges(): void {
+    private createWireframe(): void{
         // Lazy Loading
         if (this.edges != null || this.mesh == null) return;
-        const edgeMeshes = new Group();
-        for (const child of this.mesh.children) {
-            const mesh = child as Mesh;
-            if (mesh.isMesh) {
-                const edges = new EdgesGeometry(mesh.geometry);
-                const line = new LineSegments(
-                    edges,
-                    new LineBasicMaterial({ color: 0xffff00 })
-                );
-                line.matrixAutoUpdate = false;
-                line.applyMatrix4(mesh.matrixWorld);
-                edgeMeshes.add(line);
-            }
-        }
-        this.edges = edgeMeshes;
+        // Wireframe overlay from same geometry
+        const wireframeGeometry = new WireframeGeometry(extractGeometry(this.mesh)); // full edges
+        const wireframe = new LineSegments(
+            wireframeGeometry,
+            new LineBasicMaterial({
+                color: 0xffff00,
+                linewidth: 1 // note: linewidth may not work in all browsers
+            })
+        );
+
+        // 3. Match position, rotation, scale (or use matrixWorld)
+        wireframe.matrixAutoUpdate = false;
+
+        // 4. Set render order to draw on top
+        wireframe.renderOrder = 1;
+        wireframe.material.depthTest = false; // makes it draw over the mesh
+        this.edges = wireframe;
         this.add(this.edges);
     }
 
     public toggleHighlight(): boolean {
         if (!this.mesh) return false;
-        this.selected = !this.selected;
-        return this.setHighlight(this.selected);
+        return this.setHighlight(!this.selected);
     }
 
     public setHighlight(state: boolean): boolean {
         if (!this.mesh) return false;
-        this.createEdges();
+        this.createWireframe();
         (this.edges as Group).visible = state;
+        this.selected = state;
         return state;
     }
 
@@ -60,18 +68,22 @@ class BenchModel extends Group {
     }
 }
 
-function readFileAsText(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    
-    reader.onload = () => {
-      resolve(reader.result as string);
-    };
+function extractGeometry(loadedObj: Group): BufferGeometry {
+    const geometries: BufferGeometry[] = [];
 
-    reader.onerror = reject;
-    reader.readAsText(file);
-  });
+    loadedObj.traverse((child) => {
+        const mesh = child as Mesh;
+        if (mesh.isMesh) {
+            const geom = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+            geometries.push(geom);
+        }
+    });
+
+    const mergedGeometry = mergeVertices(mergeGeometries(geometries, true));
+    console.log(mergedGeometry ? "Indexed after merging" : "Still not indexed");
+    return mergedGeometry;
 }
+
 
 export {
     BenchModel

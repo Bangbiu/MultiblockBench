@@ -1,8 +1,9 @@
 import { FullScreenCamera, FullScreenRenderer, ModelOrbitalControl } from './scene/FullScreenRender';
-import { BenchGrid, DefaultBlock } from './scene/BenchGrid';
+import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
 import { BenchModel } from './scene/BenchModel';
 import { Color, Raycaster, Scene, Vector2 } from 'three';
+import { FileUtil } from './util/FileUtil';
 
 
 class App {
@@ -49,12 +50,11 @@ class App {
     public createMenu(): void {
         const objInput = document.getElementById("objLoader") as HTMLInputElement;
         objInput.addEventListener("change", () => {
-            const file = objInput.files?.[0];
-            if (!file) return;
-            const model: BenchModel = new BenchModel(file);
+            const arrangedList = FileUtil.arrangeObjMtl(objInput.files);
+            if (!arrangedList) return;
+            const model: BenchModel = new BenchModel(arrangedList);
             this.models.add(model);
             this.scene.add(model);
-            
             // Enable Multiple Loading of Same File
             objInput.value = "";
         });
@@ -63,6 +63,7 @@ class App {
     public registerEvents(): void {
         // Mouse
         document.addEventListener('mousedown', (event) => {
+            if (event.button == 2) return;
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
