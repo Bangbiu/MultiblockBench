@@ -1,21 +1,19 @@
 import { 
     Object3D, 
     Group, 
-    Mesh, 
     LineSegments, 
     LineBasicMaterial, 
     Raycaster, 
-    BufferGeometry, 
     WireframeGeometry
 } from 'three';
-import { mergeVertices } from 'three-stdlib';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
+
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
-import type { LoadingUI } from '../gui/Loading';
+import { LoadingUI, type PassThroughIntepretor, type SubEventHandler } from '../gui/Loading';
+import { GeometryUtil } from '../util/GeometryUtil';
 
 class BenchModel extends Group {
     private mesh: Group | null = null;
-    private edges: Object3D | null = null;
+    private edges: LineSegments | null = null;
     public selected = false;
 
     constructor(loadedObj: Group | null = null) {
@@ -36,27 +34,16 @@ class BenchModel extends Group {
         }
     }
 
-    private createWireframe(): void{
-        // Lazy Loading
+    private createWireframe(eventHandler?: SubEventHandler<PassThroughIntepretor>): void {
+        // Lazy Loading   
+        eventHandler?.onStart(0, "Wire Frame");   
         if (this.edges != null || this.mesh == null) return;
         // Wireframe overlay from same geometry
-        const wireframeGeometry = new WireframeGeometry(extractGeometry(this.mesh)); // full edges
-        const wireframe = new LineSegments(
-            wireframeGeometry,
-            new LineBasicMaterial({
-                color: 0xffff00,
-                linewidth: 1 // note: linewidth may not work in all browsers
-            })
-        );
-
-        // 3. Match position, rotation, scale (or use matrixWorld)
-        wireframe.matrixAutoUpdate = false;
-
-        // 4. Set render order to draw on top
-        wireframe.renderOrder = 1;
-        //wireframe.material.depthTest = false; // makes it draw over the mesh
-        this.edges = wireframe;
-        this.add(this.edges);
+        requestAnimationFrame(() => {
+            this.edges = GeometryUtil.createWireFrame(this.mesh!);
+            if (this.edges) this.add(this.edges);
+            eventHandler?.onProgress(1, "Wire Frame");
+        });
     }
 
     public toggleHighlight(): boolean {
@@ -67,7 +54,7 @@ class BenchModel extends Group {
     public setHighlight(state: boolean): boolean {
         if (!this.mesh) return false;
         this.createWireframe();
-        (this.edges as Group).visible = state;
+        this.edges!.visible = state;
         this.selected = state;
         return state;
     }
@@ -80,27 +67,19 @@ class BenchModel extends Group {
 
     public static load(fileList: ArrangedFiles, loadingUI: LoadingUI | null = null): BenchModel {
         const model = new BenchModel();
-        FileUtil.loadObj(fileList, loadingUI).then((obj) => { 
+        loadingUI?.onStart();
+        const objLoadingHandler = loadingUI?.pushObjLoadingHandler();
+        const objMeshingHandler = loadingUI?.pushSubHandler();
+        console.log(objMeshingHandler?.range);
+        
+        FileUtil.loadObj(fileList, objLoadingHandler)
+        .then((obj) => { 
             model.setMesh(obj);
+            model.createWireframe(objMeshingHandler);
+            //loadingUI?.onLoad();
         });
         return model;
     }
-}
-
-function extractGeometry(loadedObj: Group): BufferGeometry {
-    const geometries: BufferGeometry[] = [];
-
-    loadedObj.traverse((child) => {
-        const mesh = child as Mesh;
-        if (mesh.isMesh) {
-            const geom = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
-            geometries.push(geom);
-        }
-    });
-
-    const mergedGeometry = mergeVertices(mergeGeometries(geometries, true));
-    console.log(mergedGeometry ? "Indexed after merging" : "Still not indexed");
-    return mergedGeometry;
 }
 
 

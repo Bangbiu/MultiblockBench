@@ -94,6 +94,7 @@ canvas {
 }
 
 .loadingText {
+  margin-top: 10px;
   color: white;
   font-size: 24px;
   font-family: sans-serif;
@@ -132,4 +133,11 @@ canvas {
   margin: 10px auto;
   border-radius: 5px;
   overflow: hidden;
+}
+
+.progressBar {
+  height: 100%;
+  background: #00bfff;
+  width: 0%;
+  transition: width 0.2s ease;
 }

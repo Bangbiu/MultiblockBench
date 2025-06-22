@@ -1,10 +1,48 @@
-import { BufferAttribute, BufferGeometry, LineBasicMaterial, LineSegments, Vector3 } from "three";
+import { BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Mesh, Vector3, WireframeGeometry } from "three";
+import { mergeBufferGeometries } from "three-stdlib";
 
 export class GeometryUtil {
 
+    public static extractGeometry(loadedObj: Group): BufferGeometry | null {
+        const geometries: BufferGeometry[] = [];
+
+        loadedObj.traverse((child) => {
+            const mesh = child as Mesh;
+            if (mesh.isMesh) {
+                const geom = mesh.geometry.clone().applyMatrix4(mesh.matrixWorld);
+                geometries.push(geom);
+            }
+        });
+        
+        const mergedGeometry = mergeBufferGeometries(geometries, true);
+        //mergeVertices();
+        console.log(mergedGeometry ? "Indexed after merging" : "Still not indexed");
+        return mergedGeometry;
+    }
+
+    public static createWireFrame(loadedObj: Group) {
+        const geometry = GeometryUtil.extractGeometry(loadedObj);
+        if (!geometry) return null;
+        const wireframeGeometry = new WireframeGeometry(geometry);
+        const wireframe = new LineSegments(
+            wireframeGeometry,
+            new LineBasicMaterial({
+                color: 0xffff00,
+                linewidth: 1 // note: linewidth may not work in all browsers
+            })
+        );
+
+        // 3. Match position, rotation, scale (or use matrixWorld)
+        wireframe.matrixAutoUpdate = false;
+
+        // 4. Set render order to draw on top
+        wireframe.renderOrder = 1;
+        //wireframe.material.depthTest = false; // makes it draw over the mesh
+        return wireframe;
+    }
+
     public static createUniqueWireframe(geometry: BufferGeometry): LineSegments {
         const positionAttr = geometry.attributes.position;
-
         if (!positionAttr) {
             console.warn("Mesh has no position attribute");
             return new LineSegments();

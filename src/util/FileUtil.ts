@@ -1,8 +1,8 @@
 import { LoadingManager, Group, Mesh, MeshPhongMaterial, Color } from "three";
 import { MTLLoader, OBJLoader, type MaterialCreator } from "three-stdlib";
-import type { LoadingUI } from "../gui/Loading";
+import type { SubEventHandler } from "../gui/Loading";
 
-type OptFile = File | undefined;
+type OptFile = File | undefined  | null;
 type ArrangedFiles = [File, OptFile, ...File[]]
 
 class FileUtil {
@@ -25,8 +25,8 @@ class FileUtil {
         return parts.length > 1 ? parts.pop()!.toLowerCase() : '';
     }
 
-    public static arrangeObjMtl(fileList: FileList | null): ArrangedFiles | undefined {
-        if (!fileList) return undefined;
+    public static arrangeObjMtl(fileList: FileList | null): ArrangedFiles | null {
+        if (!fileList) return null;
         let fileArr = [...fileList];
         let objFile: OptFile = undefined;
         let mtlFile: OptFile = undefined; 
@@ -43,22 +43,20 @@ class FileUtil {
                 }
             }
         );
-        if (!objFile) return undefined;
+        if (!objFile) return null;
         return [objFile, mtlFile, ...fileArr];
     }
 
-    public static async loadObj(fileList: ArrangedFiles, loadingUI: LoadingUI | null = null): Promise<Group> {
+    public static async loadObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler): Promise<Group> {
         const objFile: File = fileList[0];
         const mtlFile: OptFile = fileList[1]; 
         const textureFiles: Array<File> = fileList.slice(2) as Array<File>;
         const manager = new LoadingManager();
         const objLoader = new OBJLoader(manager);
         //console.log(fileList);
-        if (loadingUI) {
+        if (eventHandler) {
             // Binding UI
-            manager.onStart = loadingUI.onStart;
-            manager.onProgress = loadingUI.onProgress;
-            manager.onLoad = loadingUI.onLoad;
+            eventHandler.handle(manager);
         }
         
         if (mtlFile) {
@@ -101,7 +99,6 @@ class FileUtil {
                 URL.revokeObjectURL(url);
             }
 
-            object.scale.set(16, 16, 16);
             return object;
         } else {
             console.log("No mtllib reference found in the OBJ file.");
@@ -115,7 +112,6 @@ class FileUtil {
                 }
             });
             // Resize to Fit Grid
-            loadedObj.scale.set(16, 16, 16);
             return loadedObj;
         }
     }
