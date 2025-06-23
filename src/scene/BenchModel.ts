@@ -1,14 +1,12 @@
 import { 
-    Object3D, 
     Group, 
     LineSegments, 
-    LineBasicMaterial, 
-    Raycaster, 
-    WireframeGeometry
+    Raycaster,
+    Vector3, 
 } from 'three';
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
-import { LoadingUI, type PassThroughIntepretor, type SubEventHandler } from '../gui/Loading';
+import { Intepretors, LoadingUI, type ObjProgIntepretor, type SubEventHandler } from '../gui/Loading';
 import { GeometryUtil } from '../util/GeometryUtil';
 
 class BenchModel extends Group {
@@ -24,6 +22,7 @@ class BenchModel extends Group {
     public setMesh(loadedObj: Group): void {
         this.clearMesh();
         this.mesh = loadedObj;
+        this.mesh.scale.copy(BenchModel.BENCH_SCALE);
         this.add(this.mesh);
     }
 
@@ -34,16 +33,21 @@ class BenchModel extends Group {
         }
     }
 
-    private createWireframe(eventHandler?: SubEventHandler<PassThroughIntepretor>): void {
+    protected loadfromObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler<ObjProgIntepretor>): void {
+        FileUtil.loadObj(fileList, eventHandler).then((obj) => this.setMesh(obj));
+    }
+
+    protected createWireframe(eventHandler?: SubEventHandler): void {
         // Lazy Loading   
-        eventHandler?.onStart(0, "Wire Frame");   
         if (this.edges != null || this.mesh == null) return;
         // Wireframe overlay from same geometry
-        requestAnimationFrame(() => {
-            this.edges = GeometryUtil.createWireFrame(this.mesh!);
-            if (this.edges) this.add(this.edges);
-            eventHandler?.onProgress(1, "Wire Frame");
-        });
+        this.edges = GeometryUtil.createWireFrame(this.mesh!);
+        if (this.edges) {
+            this.add(this.edges);
+            this.edges!.scale.copy(BenchModel.BENCH_SCALE);
+            this.setHighlight(false);
+        }
+        eventHandler?.onLoad();
     }
 
     public toggleHighlight(): boolean {
@@ -65,21 +69,20 @@ class BenchModel extends Group {
         return intersects.length > 0;
     }
 
-    public static load(fileList: ArrangedFiles, loadingUI: LoadingUI | null = null): BenchModel {
+    public static load(fileList: ArrangedFiles, loadingUI: LoadingUI): BenchModel {
         const model = new BenchModel();
-        loadingUI?.onStart();
-        const objLoadingHandler = loadingUI?.pushObjLoadingHandler();
-        const objMeshingHandler = loadingUI?.pushSubHandler();
-        console.log(objMeshingHandler?.range);
+
+        loadingUI.onStart();
+        loadingUI.startProcess()
+        .then("Obj File Loading", 
+            (handler) => model.loadfromObj(fileList, handler), Intepretors.ObjProg)
+        .finally("Creating Wire Frame", model.createWireframe.bind(model))
+        .work();
         
-        FileUtil.loadObj(fileList, objLoadingHandler)
-        .then((obj) => { 
-            model.setMesh(obj);
-            model.createWireframe(objMeshingHandler);
-            //loadingUI?.onLoad();
-        });
         return model;
     }
+
+    public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
 }
 
 

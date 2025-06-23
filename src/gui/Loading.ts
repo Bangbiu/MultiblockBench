@@ -2,13 +2,21 @@ import { FileUtil } from "../util/FileUtil";
 
 type AnyArgs = any[]
 type AnyAction = (...args: AnyArgs) => void;
+type UIChanger = (...info: LoadingInfo) => void;
 
 type ProgressRange = [number, number];
 type LoadingInfo = [number, string];
 type ProgressIntepretor = (...args: AnyArgs) => LoadingInfo;
 type PassThroughIntepretor = (prog: number, content: string) => LoadingInfo;
 type ObjProgIntepretor = (url: string, loaded: number, total: number) => LoadingInfo;
-type UIChanger = (...info: LoadingInfo) => void;
+type Loadable<I extends ProgressIntepretor> = (...args: [...any, SubEventHandler<I>]) => any;
+
+type HandlerCreator = <I extends ProgressIntepretor>(intepretor: I) => SubEventHandler<I>;
+type HandledJob<I extends ProgressIntepretor = ProgressIntepretor> = (handler: SubEventHandler<I>) => void;
+type HandledTask<I extends ProgressIntepretor = ProgressIntepretor> = {
+    job: HandledJob<I>,
+    handler: SubEventHandler<I>
+}
 
 interface Progressable {
     onStart?: AnyAction;
@@ -16,7 +24,9 @@ interface Progressable {
     onLoad: () => void;
 }
 
-class SubEventHandler<I extends ProgressIntepretor = ProgressIntepretor> implements Progressable {
+class SubEventHandler<I extends ProgressIntepretor = PassThroughIntepretor> implements Progressable {
+    // Event Name
+    public name?: string;
     // Starting Point, Lengh
     public range: [number, number];
     // Local Range from 0.0 to 1.0
@@ -50,7 +60,9 @@ class SubEventHandler<I extends ProgressIntepretor = ProgressIntepretor> impleme
         this.onChange(...args);
     }
 
-    public onLoad(): void {}
+    public onLoad(): void {
+
+    }
 
     public onChange(...args: Parameters<I>): void {
         const info = this.intepretor(...args);
@@ -81,32 +93,40 @@ class LoadingUI extends SubEventHandler<PassThroughIntepretor> {
     public readonly progressBar: HTMLDivElement;
     public readonly progressLabel: HTMLElement;
 
-    // Handler Sequence
-    public handlers: Array<SubEventHandler>;
+    // Tasks
+    private readonly tasks: TaskSequence;
+
     public loadingText: string;
 
     constructor() {
-        super(DO_NOTHING, LoadingUI.passThrough);
+        super(DO_NOTHING, Intepretors.PassThrough);
         this.onUIChange = this.onProgress;
+        this.createHandler = this.createHandler.bind(this);
+
         this.loadingOverlay = document.getElementById('loadingOverlay')!;
         this.progressBar = document.getElementById('progressBar') as HTMLDivElement;
         this.progressLabel = document.getElementById('progressLabel')!;
 
-        this.handlers = new Array<SubEventHandler>();
+        this.tasks = new TaskSequence(this.createHandler, this.onLoad);
         this.loadingText = "Loading"
+    }
+
+    public show(text: string): void {
+        this.loadingText = text;
+        this.progressLabel.textContent = text;
     }
     
     public onStart(): void {
         this.loadingOverlay.classList.remove('fade-out');
         this.loadingOverlay.style.display = 'flex';
         this.progressBar.style.width = '0%';
-        this.progressLabel.textContent = 'Loading 0%';
+        this.show("Loading 0%");
     }
 
     public onProgress(progress: number, loadingContent: string): void {
         const percent = Math.floor(progress * 100);
         this.progressBar.style.width = `${percent}%`;
-        this.progressLabel.textContent = `Loading ${loadingContent}... ${percent}%`;
+        this.show(`${loadingContent}... ${percent}%`);
     }
 
     public onLoad(): void {
@@ -119,47 +139,90 @@ class LoadingUI extends SubEventHandler<PassThroughIntepretor> {
     };
 
     public createHandler<I extends ProgressIntepretor>(intepretor?: I): SubEventHandler<I> {
-        const processFn = intepretor ?? LoadingUI.passThrough;
+        const processFn = intepretor ?? Intepretors.PassThrough;
         return new SubEventHandler<I>(this.onProgress, processFn as I);
     }
 
-    public pushSubHandler<I extends ProgressIntepretor>(intepretor?: I, final: boolean = false): SubEventHandler<I> {
-        const handler = this.createHandler(intepretor);
-        if (final) handler.onLoad = this.onLoad;
-        // Arrenge Jobs
-        this.handlers.push(handler);
-        const handlerCount = this.handlers.length;
-        const handlerLen = 1.0 / handlerCount;
-        this.handlers.forEach((handler, ind) => {
-            handler.setRange(ind / handlerCount, handlerLen);
+    public startProcess(): TaskSequence {
+        this.tasks.clear();
+        return this.tasks;
+    }
+
+
+}
+
+class TaskSequence {
+    public readonly handledTasks: Array<HandledTask<ProgressIntepretor>>;
+    private readonly creator: HandlerCreator;
+    private readonly finalizer: AnyAction;
+
+    private lastTask?: HandledTask<ProgressIntepretor>;
+
+    constructor(handlerCreator: HandlerCreator, finalizer: AnyAction = DO_NOTHING) {
+        this.creator = handlerCreator;
+        this.finalizer = finalizer;
+        this.handledTasks = new Array();
+    }
+
+    public then<I extends ProgressIntepretor>(name: string, job: HandledJob<I>, intepretor?: I): this {
+        const handler = this.creator(intepretor ?? Intepretors.PassThrough);
+        const curTask = { job: job as HandledJob, handler: handler };
+        this.handledTasks.push(curTask);
+        
+        const taskCount = this.handledTasks.length;
+        const taskLen = 1.0 / taskCount;
+        this.handledTasks.forEach((task, ind) => {
+            task.handler.setRange(ind / taskCount, taskLen);
         });
-        return handler;
+        if (this.lastTask) {
+            this.lastTask.handler.onLoad = () => {
+                if (name) curTask.handler.onStart(0, name);
+                setTimeout(() => curTask.job(curTask.handler), TaskSequence.TIME_PADDING);
+            };
+        }
+        this.lastTask = curTask;
+        return this;
     }
 
-    public clearEvents(): void {
-        this.handlers.length = 0;
+    public finally<I extends ProgressIntepretor>(name: string, job: HandledJob<I>, intepretor?: I): this {
+        this.then(name, job, intepretor);
+        this.lastTask!.handler.onLoad = this.finalizer;
+        return this;
     }
 
-    // Customized Progress
-    public pushObjLoadingHandler(): SubEventHandler<ObjProgIntepretor> {
-        const intepretor: ObjProgIntepretor = 
-            (url: string, loaded: number, total: number) => [ loaded / total, FileUtil.getFileName(url) ];
-        return this.pushSubHandler(intepretor);
+    public work(): void {
+        if (this.handledTasks.length > 0) {
+            this.handledTasks[0].job(this.handledTasks[0].handler);
+        }
     }
 
-    public static passThrough(progress: number, content: string): LoadingInfo {
-        return [progress, content];
+    public clear(): void {
+        this.handledTasks.length = 0;
     }
+
+    public static readonly TIME_PADDING: number = 200;
 }
 
 const DO_NOTHING = function(){};
 
+const Intepretors: {
+    PassThrough: PassThroughIntepretor;
+    ObjProg: ObjProgIntepretor;
+} = {
+    PassThrough: (progress: number, content: string) => [ progress, content ],
+    ObjProg: (url: string, loaded: number, total: number) => 
+        [ loaded / total, "Loading " + FileUtil.getFileName(url) ],
+} as const;
+
 export type {
+    ObjProgIntepretor,
     Progressable,
-    SubEventHandler,
-    PassThroughIntepretor
+    Loadable,
+    SubEventHandler
 }
 
 export {
-    LoadingUI
+    LoadingUI,
+    Intepretors,
+    TaskSequence
 }

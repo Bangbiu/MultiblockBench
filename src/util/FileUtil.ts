@@ -1,6 +1,6 @@
 import { LoadingManager, Group, Mesh, MeshPhongMaterial, Color } from "three";
 import { MTLLoader, OBJLoader, type MaterialCreator } from "three-stdlib";
-import type { SubEventHandler } from "../gui/Loading";
+import type { ObjProgIntepretor, SubEventHandler } from "../gui/Loading";
 
 type OptFile = File | undefined  | null;
 type ArrangedFiles = [File, OptFile, ...File[]]
@@ -14,7 +14,6 @@ class FileUtil {
                 shininess: 150,         
                 specular: new Color(0xaaaaaa),
             });;
-
 
     public static getFileName(url: string): string {
         return url.split('/').pop()!
@@ -47,13 +46,13 @@ class FileUtil {
         return [objFile, mtlFile, ...fileArr];
     }
 
-    public static async loadObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler): Promise<Group> {
+    public static async loadObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler<ObjProgIntepretor>): Promise<Group> {
         const objFile: File = fileList[0];
         const mtlFile: OptFile = fileList[1]; 
         const textureFiles: Array<File> = fileList.slice(2) as Array<File>;
         const manager = new LoadingManager();
         const objLoader = new OBJLoader(manager);
-        //console.log(fileList);
+        const objURL = URL.createObjectURL(objFile);
         if (eventHandler) {
             // Binding UI
             eventHandler.handle(manager);
@@ -62,10 +61,8 @@ class FileUtil {
         if (mtlFile) {
             // Found Material File
             console.log("Referenced MTL file:", mtlFile.name);
-            // Convert File objects to Object URLs
-            const objURL = URL.createObjectURL(objFile);
+            // Convert File to URLs
             const mtlURL = URL.createObjectURL(mtlFile);
-
             // Setup fake file system mapping for textures
             const textureMap = new Map<string, string>();
             for (const tex of textureFiles) {
@@ -102,8 +99,9 @@ class FileUtil {
             return object;
         } else {
             console.log("No mtllib reference found in the OBJ file.");
-            const objText = await FileUtil.readFileAsText(objFile);
-            const loadedObj = objLoader.parse(objText);
+            const loadedObj = await new Promise<Group>((resolve, reject) => {
+                objLoader.load(objURL, resolve, undefined, reject);
+            });
             // Apply the material to all meshes in the group
             loadedObj.traverse((child) => {
                 if ((child as Mesh).isMesh) {
@@ -111,7 +109,6 @@ class FileUtil {
                     mesh.material = FileUtil.DEF_MAT;
                 }
             });
-            // Resize to Fit Grid
             return loadedObj;
         }
     }
