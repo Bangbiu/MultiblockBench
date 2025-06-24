@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, Group, LineBasicMaterial, LineSegments, Mesh, Vector3, WireframeGeometry } from "three";
+import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, Mesh, Vector3, WireframeGeometry } from "three";
 import { mergeBufferGeometries } from "three-stdlib";
 
 export class GeometryUtil {
@@ -16,12 +16,10 @@ export class GeometryUtil {
         
         const mergedGeometry = mergeBufferGeometries(geometries, true);
         //mergeVertices();
-        console.log(mergedGeometry ? "Indexed after merging" : "Still not indexed");
         return mergedGeometry;
     }
 
-    public static createWireFrame(loadedObj: Group) {
-        const geometry = GeometryUtil.extractGeometry(loadedObj);
+    public static createWireFrame(geometry: BufferGeometry) {
         if (!geometry) return null;
         const wireframeGeometry = new WireframeGeometry(geometry);
         const wireframe = new LineSegments(
@@ -31,14 +29,51 @@ export class GeometryUtil {
                 linewidth: 1 // note: linewidth may not work in all browsers
             })
         );
-
-        // 3. Match position, rotation, scale (or use matrixWorld)
-        wireframe.matrixAutoUpdate = false;
-
-        // 4. Set render order to draw on top
+        // Set render order to draw on top
         wireframe.renderOrder = 1;
         //wireframe.material.depthTest = false; // makes it draw over the mesh
         return wireframe;
+    }
+
+    public static mergeVerticesWithNormals(geometry: BufferGeometry, tolerance = 1e-4): BufferGeometry {
+        // Ensure it's non-indexed so each triangle has separate vertices
+        const nonIndexed = geometry.toNonIndexed();
+        const posAttr = nonIndexed.getAttribute('position');
+        const normAttr = nonIndexed.getAttribute('normal');
+        const uvAttr = nonIndexed.getAttribute('uv');
+
+        const newPositions: number[] = [];
+        const newNormals: number[] = [];
+        const newUVs: number[] = [];
+        const vertexMap = new Map<string, number>(); // key: "x|y|z", value: new index
+        const indexMap: number[] = [];
+
+        for (let i = 0; i < posAttr.count; i++) {
+            const x = posAttr.getX(i);
+            const y = posAttr.getY(i);
+            const z = posAttr.getZ(i);
+
+            const key = `${Math.round(x / tolerance)}|${Math.round(y / tolerance)}|${Math.round(z / tolerance)}`;
+            if (vertexMap.has(key)) {
+            indexMap.push(vertexMap.get(key)!);
+            } else {
+            const newIndex = newPositions.length / 3;
+            vertexMap.set(key, newIndex);
+            newPositions.push(x, y, z);
+
+            if (normAttr) newNormals.push(normAttr.getX(i), normAttr.getY(i), normAttr.getZ(i));
+            if (uvAttr) newUVs.push(uvAttr.getX(i), uvAttr.getY(i));
+            indexMap.push(newIndex);
+            }
+        }
+
+        const merged = new BufferGeometry();
+        merged.setIndex(indexMap);
+        merged.setAttribute('position', new Float32BufferAttribute(newPositions, 3));
+        if (newNormals.length > 0) merged.setAttribute('normal', new Float32BufferAttribute(newNormals, 3));
+        if (newUVs.length > 0) merged.setAttribute('uv', new Float32BufferAttribute(newUVs, 2));
+        merged.computeVertexNormals();
+        return merged;
     }
 
     public static createUniqueWireframe(geometry: BufferGeometry): LineSegments {

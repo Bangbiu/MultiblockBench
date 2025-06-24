@@ -1,71 +1,67 @@
 import { 
     Group, 
     LineSegments, 
+    Mesh, 
     Raycaster,
-    Vector3, 
+    Vector3,
 } from 'three';
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { Intepretors, LoadingUI, type ObjProgIntepretor, type SubEventHandler } from '../gui/Loading';
 import { GeometryUtil } from '../util/GeometryUtil';
 
+
 class BenchModel extends Group {
-    private mesh: Group | null = null;
-    private edges: LineSegments | null = null;
-    public selected = false;
-
-    constructor(loadedObj: Group | null = null) {
+    public children: Array<BenchMesh>;
+    public selected: boolean;
+    constructor() {
         super();
-        if (loadedObj) this.setMesh(loadedObj);
+        this.children = new Array();
+        this.scale.copy(BenchModel.BENCH_SCALE);
+        this.selected = false;
     }
 
-    public setMesh(loadedObj: Group): void {
-        this.clearMesh();
-        this.mesh = loadedObj;
-        this.mesh.scale.copy(BenchModel.BENCH_SCALE);
-        this.add(this.mesh);
+    public add(...meshes: Array<BenchMesh>): this {
+        super.add(...meshes);
+        return this;
     }
 
-    public clearMesh(): void {
-        if (this.mesh) {
-            this.remove(this.mesh);
-            this.mesh = null;
-        }
+    protected fromGroup(group: Group) {
+        this.clear();
+        group.children.forEach(
+            (obj) => {
+                if ((obj as Mesh).isMesh) this.add(new BenchMesh(obj as Mesh));
+            }
+        );
     }
 
-    protected loadfromObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler<ObjProgIntepretor>): void {
-        FileUtil.loadObj(fileList, eventHandler).then((obj) => this.setMesh(obj));
+    protected fromObjFile(fileList: ArrangedFiles, eventHandler?: SubEventHandler<ObjProgIntepretor>): void {
+        this.clear();
+        FileUtil.loadObj(fileList, eventHandler).then(
+            (group) => this.fromGroup(group)
+        );
     }
 
-    protected createWireframe(eventHandler?: SubEventHandler): void {
-        // Lazy Loading   
-        if (this.edges != null || this.mesh == null) return;
-        // Wireframe overlay from same geometry
-        this.edges = GeometryUtil.createWireFrame(this.mesh!);
-        if (this.edges) {
-            this.add(this.edges);
-            this.edges!.scale.copy(BenchModel.BENCH_SCALE);
-            this.setHighlight(false);
-        }
+    protected createWireframe(eventHandler?: SubEventHandler) {
+        this.children.forEach((mesh, index) => { 
+            eventHandler?.onProgress(index / this.children.length, "Loading " + mesh.name);
+            mesh.createWireframe();
+        });
         eventHandler?.onLoad();
     }
 
     public toggleHighlight(): boolean {
-        if (!this.mesh) return false;
         return this.setHighlight(!this.selected);
     }
 
     public setHighlight(state: boolean): boolean {
-        if (!this.mesh) return false;
-        this.createWireframe();
-        this.edges!.visible = state;
+        this.children.forEach(mesh => mesh.setHighlight(state));
         this.selected = state;
         return state;
     }
 
     public intersects(raycaster: Raycaster): boolean {
-        if (!this.mesh) return false;
-        const intersects = raycaster.intersectObject(this.mesh, true);
+        const intersects = raycaster.intersectObject(this, true);
         return intersects.length > 0;
     }
 
@@ -75,17 +71,63 @@ class BenchModel extends Group {
         loadingUI.onStart();
         loadingUI.startProcess()
         .then("Obj File Loading", 
-            (handler) => model.loadfromObj(fileList, handler), Intepretors.ObjProg)
+            (handler) => model.fromObjFile(fileList, handler), Intepretors.ObjProg)
         .finally("Creating Wire Frame", model.createWireframe.bind(model))
         .work();
         
         return model;
     }
-
     public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
+}
+
+class BenchMesh extends Group {
+    private mesh: Mesh;
+    private wireframe: LineSegments | null;
+
+    constructor(loadedMesh: Mesh) {
+        super();
+        this.mesh = loadedMesh;
+        this.name = loadedMesh.name;
+        this.add(this.mesh);
+        this.wireframe = null;
+    }
+
+    public createWireframe(): void {
+        // Lazy Loading   
+        if (this.wireframe) return;
+        // Wireframe overlay from same geometry
+        const wireframe = GeometryUtil.createWireFrame(this.mesh.geometry);
+        if (wireframe) {
+            this.wireframe = wireframe;
+            this.add(wireframe);
+            this.setHighlight(false);
+        }
+    }
+
+    public recreateWireframe(): void {
+        let visible = false;
+        if (this.wireframe) {
+            visible = this.wireframe.visible;
+            this.remove(this.wireframe);
+            this.wireframe = null;
+        }
+        this.createWireframe();
+        this.setHighlight(visible);
+    }
+
+    public setHighlight(state: boolean): boolean {
+        if (!this.wireframe) return false;
+        this.wireframe.visible = state;
+        return state;
+    }
+
+    public merge(): void {
+        this.mesh.geometry = GeometryUtil.mergeVerticesWithNormals(this.mesh.geometry);
+    }
 }
 
 
 export {
-    BenchModel
+    BenchModel,
+    BenchMesh
 }

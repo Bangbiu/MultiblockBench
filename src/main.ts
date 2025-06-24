@@ -55,7 +55,7 @@ class App {
 
     public registerEvents(): void {
         // Mouse
-        document.addEventListener('mousedown', (event) => {
+        document.addEventListener("mousedown", (event) => {
             if (event.button == 2) return;
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -85,7 +85,7 @@ class App {
         });
 
         // KeyBoard
-        document.addEventListener('keyup', (event) => {
+        document.addEventListener("keyup", (event) => {
             if (event.key === 'Delete') {
                 for (const model of this.selected) {
                     this.scene.remove(model);
@@ -99,11 +99,23 @@ class App {
         this.objFileInput.addEventListener("change", () => {
             const arrangedList = FileUtil.arrangeObjMtl(this.objFileInput.files);
             if (!arrangedList) return;
-            const model: BenchModel = BenchModel.load(arrangedList, this.loadingUI);
+            const model: BenchModel = BenchModel.load(arrangedList!, this.loadingUI);
             this.models.add(model);
             this.scene.add(model);
             // Enable Multiple Loading of Same File
             this.objFileInput.value = "";
+        });
+
+        document.addEventListener("DOMContentLoaded", () => {
+            const onMergeVertices = document.getElementById("mergeVerticesButton");
+            if (onMergeVertices) {
+                onMergeVertices.addEventListener("click", () => {
+                    this.selected.forEach((model) => {
+                        model.children[0].merge();
+                        model.children[0].recreateWireframe();
+                    })
+                });
+            }
         });
     }
 
