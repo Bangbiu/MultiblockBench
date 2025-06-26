@@ -7,7 +7,7 @@ class BenchLighting extends Group {
         light.position.set(-32, 32, -32);
         this.add(light);
 
-        const ambientLight = new AmbientLight(0xffffff, 0.3); // color, intensity
+        const ambientLight = new AmbientLight(0xffffff, 2); // color, intensity
         this.add(ambientLight);
     }
 }

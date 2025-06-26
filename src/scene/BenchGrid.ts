@@ -4,7 +4,7 @@ class BenchGrid extends Group {
     constructor() {
         super();
         // Grid helper on the XZ plane 1m per block segment
-        this.add(new GridHelper(160, 160, 0x555555, 0x555555));
+        this.add(new GridHelper(160, 160, 0xAAAAAA, 0xAAAAAA));
         // Grid helper on the XZ plane 16m per block
         this.add(new GridHelper(160, 10, 0xFFFFFF, 0xFFFFFF));
         

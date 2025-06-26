@@ -35,45 +35,59 @@ export class GeometryUtil {
         return wireframe;
     }
 
-    public static mergeVerticesWithNormals(geometry: BufferGeometry, tolerance = 1e-4): BufferGeometry {
-        // Ensure it's non-indexed so each triangle has separate vertices
-        const nonIndexed = geometry.toNonIndexed();
-        const posAttr = nonIndexed.getAttribute('position');
-        const normAttr = nonIndexed.getAttribute('normal');
-        const uvAttr = nonIndexed.getAttribute('uv');
+    public static mergeVerticesWithNormals(geometry: BufferGeometry, normalThreshold = 0.01): BufferGeometry {
+        // Step 1: Ensure indexed geometry
+        geometry = geometry.toNonIndexed();
+        const posAttr = geometry.getAttribute('position');
+        const faceCount = posAttr.count / 3;
 
+        // Helper to get face normal
+        function getFaceNormal(i: number): Vector3 {
+            const a = new Vector3().fromBufferAttribute(posAttr, i * 3);
+            const b = new Vector3().fromBufferAttribute(posAttr, i * 3 + 1);
+            const c = new Vector3().fromBufferAttribute(posAttr, i * 3 + 2);
+            const cb = new Vector3().subVectors(c, b);
+            const ab = new Vector3().subVectors(a, b);
+            return cb.cross(ab).normalize();
+        }
+
+        // Step 2: Group triangles with roughly the same normal
+        type Face = { index: number, normal: Vector3 };
+        const groups: Face[][] = [];
+
+        for (let i = 0; i < faceCount; i++) {
+            const normal = getFaceNormal(i);
+            let added = false;
+            for (const group of groups) {
+            if (group.length > 0 && group[0].normal.dot(normal) > 1 - normalThreshold) {
+                group.push({ index: i, normal });
+                added = true;
+                break;
+            }
+            }
+            if (!added) groups.push([{ index: i, normal }]);
+        }
+
+        // Step 3: Just re-add triangles per group (real minimal triangulation omitted)
         const newPositions: number[] = [];
-        const newNormals: number[] = [];
-        const newUVs: number[] = [];
-        const vertexMap = new Map<string, number>(); // key: "x|y|z", value: new index
-        const indexMap: number[] = [];
 
-        for (let i = 0; i < posAttr.count; i++) {
-            const x = posAttr.getX(i);
-            const y = posAttr.getY(i);
-            const z = posAttr.getZ(i);
-
-            const key = `${Math.round(x / tolerance)}|${Math.round(y / tolerance)}|${Math.round(z / tolerance)}`;
-            if (vertexMap.has(key)) {
-            indexMap.push(vertexMap.get(key)!);
-            } else {
-            const newIndex = newPositions.length / 3;
-            vertexMap.set(key, newIndex);
-            newPositions.push(x, y, z);
-
-            if (normAttr) newNormals.push(normAttr.getX(i), normAttr.getY(i), normAttr.getZ(i));
-            if (uvAttr) newUVs.push(uvAttr.getX(i), uvAttr.getY(i));
-            indexMap.push(newIndex);
+        for (const group of groups) {
+            for (const face of group) {
+            for (let j = 0; j < 3; j++) {
+                const idx = face.index * 3 + j;
+                newPositions.push(
+                posAttr.getX(idx),
+                posAttr.getY(idx),
+                posAttr.getZ(idx)
+                );
+            }
             }
         }
 
-        const merged = new BufferGeometry();
-        merged.setIndex(indexMap);
-        merged.setAttribute('position', new Float32BufferAttribute(newPositions, 3));
-        if (newNormals.length > 0) merged.setAttribute('normal', new Float32BufferAttribute(newNormals, 3));
-        if (newUVs.length > 0) merged.setAttribute('uv', new Float32BufferAttribute(newUVs, 2));
-        merged.computeVertexNormals();
-        return merged;
+        const newGeom = new BufferGeometry();
+        newGeom.setAttribute('position', new Float32BufferAttribute(newPositions, 3));
+        newGeom.computeVertexNormals(); // optional for smoothing
+        return newGeom;
     }
 
     public static createUniqueWireframe(geometry: BufferGeometry): LineSegments {

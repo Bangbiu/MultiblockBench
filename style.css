@@ -80,6 +80,10 @@ canvas {
   background-color: #3399ff;
 }
 
+#toolBar button[data-checked="true"] {
+  background-color: #ff8c00; /* Example checked color */
+}
+
 #loadingOverlay {
   display: none;
   position: fixed;

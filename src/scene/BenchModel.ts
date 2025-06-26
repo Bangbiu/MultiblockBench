@@ -61,7 +61,7 @@ class BenchModel extends Group {
     }
 
     public intersects(raycaster: Raycaster): boolean {
-        const intersects = raycaster.intersectObject(this, true);
+        const intersects = raycaster.intersectObjects(this.children, true);
         return intersects.length > 0;
     }
 

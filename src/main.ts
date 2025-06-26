@@ -1,14 +1,14 @@
-import { FullScreenCamera, FullScreenRenderer, ModelOrbitalControl } from './scene/FullScreenRender';
+import { FullScreenCamera, BenchRenderer, ModelOrbitalControl } from './scene/BenchRender';
 import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
 import { BenchModel } from './scene/BenchModel';
-import { Color, Raycaster, Scene, Vector2 } from 'three';
+import { Color, ColorManagement, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
 
 class App {
     // Render
-    public readonly renderer: FullScreenRenderer;
+    public readonly renderer: BenchRenderer;
     public readonly camera: FullScreenCamera;
     public readonly orbitalControl: ModelOrbitalControl;
     public readonly scene: Scene;
@@ -19,15 +19,15 @@ class App {
     public readonly selected: Set<BenchModel>;
 
     public readonly objFileInput: HTMLInputElement;
+    public readonly wireframeToggleBtn: HTMLButtonElement;
     // GUI
     public readonly loadingUI: LoadingUI;
 
     constructor() {
-        this.renderer = new FullScreenRenderer();
         this.camera = new FullScreenCamera();
-        this.orbitalControl = new ModelOrbitalControl(this.camera, this.renderer);
-        // Scene
         this.scene = this.createScene();
+        this.renderer = new BenchRenderer(this.scene, this.camera);
+        this.orbitalControl = new ModelOrbitalControl(this.camera, this.renderer);
         // Interaction
         this.raycaster = new Raycaster();
         this.mouse = new Vector2();
@@ -35,6 +35,7 @@ class App {
         this.models = new Set<BenchModel>();
         this.selected = new Set<BenchModel>();
         this.objFileInput = document.getElementById("objLoader") as HTMLInputElement;
+        this.wireframeToggleBtn = document.getElementById("wireframeToggleBtn") as HTMLButtonElement;
         // GUI
         this.loadingUI = new LoadingUI();
     }
@@ -46,7 +47,7 @@ class App {
 
     public createScene(): Scene {
         const scene = new Scene();
-        scene.background = new Color(0x222222);
+        scene.background = new Color(0x666666);
         scene.add(new BenchGrid());
         //scene.add(new DefaultBlock());
         scene.add(new BenchLighting());
@@ -63,21 +64,25 @@ class App {
 
             this.raycaster.setFromCamera(this.mouse, this.camera);
             const interacted = this.getInteracting();
+            const wireframeEnabled = this.isWireframeEnabled();
             
             if (null != interacted) {
                 if (false == event.ctrlKey) {
                     // Single Selection
-                    for (const model of this.selected) {
-                        model.setHighlight(false);
+                    if (wireframeEnabled) {
+                        for (const model of this.selected) {
+                            model.setHighlight(false);
+                        }
+                        interacted.setHighlight(true);
                     }
                     this.selected.clear();
-                    interacted.setHighlight(true);
                     this.selected.add(interacted);
                 } else {
-                    if (interacted.toggleHighlight()) {
-                        this.selected.add(interacted);
-                    } else {
+                    if (wireframeEnabled) interacted.toggleHighlight();
+                    if (this.selected.has(interacted)) {
                         this.selected.delete(interacted);
+                    } else {
+                        this.selected.add(interacted);
                     }
                 }
             }
@@ -100,10 +105,26 @@ class App {
             const arrangedList = FileUtil.arrangeObjMtl(this.objFileInput.files);
             if (!arrangedList) return;
             const model: BenchModel = BenchModel.load(arrangedList!, this.loadingUI);
+            FileUtil.loadObj(arrangedList).then((obj) => console.log(obj));
+            //model.setHighlight(true);
             this.models.add(model);
             this.scene.add(model);
             // Enable Multiple Loading of Same File
             this.objFileInput.value = "";
+        });
+
+        this.wireframeToggleBtn.addEventListener("click", () => {
+            const isChecked = !(this.wireframeToggleBtn.dataset.checked === "true");
+            this.wireframeToggleBtn.dataset.checked = isChecked.toString();
+            if (isChecked) {
+                this.selected.forEach((model) => {
+                    model.setHighlight(true);
+                })
+            } else {
+                this.models.forEach((model) => {
+                    model.setHighlight(false);
+                })
+            }
         });
 
         document.addEventListener("DOMContentLoaded", () => {
@@ -120,7 +141,13 @@ class App {
     }
 
     public update(): void {
-        this.renderer.render(this.scene, this.camera);
+        this.renderer.outlinePass.selectedObjects = Array.from(this.selected);
+        //this.renderer.render(this.scene, this.camera);
+        this.renderer.composer.render();
+    }
+
+    private isWireframeEnabled(): boolean {
+        return this.wireframeToggleBtn.dataset.checked === "true";
     }
 
     private getInteracting(): BenchModel | null {
@@ -132,6 +159,7 @@ class App {
     }
 }
 
+ColorManagement.enabled = true;
 const app = new App();
 app.init();
 

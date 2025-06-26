@@ -1,12 +1,30 @@
-import { PerspectiveCamera, Vector3, WebGLRenderer } from 'three';
-import { OrbitControls } from 'three-stdlib';
+import { ACESFilmicToneMapping, PerspectiveCamera, Scene, SRGBColorSpace, Vector2, Vector3, WebGLRenderer } from 'three';
+import { EffectComposer, OrbitControls, OutlinePass, RenderPass } from 'three-stdlib';
 
-class FullScreenRenderer extends WebGLRenderer {
-    constructor() {
+class BenchRenderer extends WebGLRenderer {
+    public readonly composer;
+    public readonly outlinePass;
+    constructor(scene: Scene, camera: PerspectiveCamera) {
         super({ antialias: true });
         this.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(this.domElement);
         window.addEventListener('resize', this.updateSize.bind(this));
+        // Composer
+        this.composer = new EffectComposer(this);
+        this.composer.addPass(new RenderPass(scene, camera));
+        const outlinePass = new OutlinePass(
+            new Vector2(window.innerWidth, window.innerHeight),
+            scene,
+            camera
+        )
+        outlinePass.edgeStrength = 4.0;
+        outlinePass.edgeGlow = 0.0;
+        outlinePass.edgeThickness = 1.0;
+        outlinePass.pulsePeriod = 0;
+        outlinePass.visibleEdgeColor.set('#ffff00'); // Yellow outline
+        outlinePass.hiddenEdgeColor.set('#ffff00');
+        this.outlinePass = outlinePass;
+        this.composer.addPass(outlinePass);
     }
 
     updateSize(): void {
@@ -46,7 +64,7 @@ class ModelOrbitalControl extends OrbitControls{
 
 
 export {
-    FullScreenRenderer,
+    BenchRenderer,
     FullScreenCamera,
     ModelOrbitalControl
 };
