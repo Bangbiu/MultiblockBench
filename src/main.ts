@@ -1,7 +1,7 @@
 import { FullScreenCamera, BenchRenderer, ModelOrbitalControl } from './scene/BenchRender';
 import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
-import { BenchModel } from './scene/BenchModel';
+import { BenchMesh, BenchModel } from './scene/BenchModel';
 import { Color, ColorManagement, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
@@ -15,8 +15,8 @@ class App {
     // Data
     public readonly raycaster: Raycaster;
     public readonly mouse: Vector2;
-    public readonly models: Set<BenchModel>;
-    public readonly selected: Set<BenchModel>;
+    public readonly model: BenchModel;
+    public readonly selected: Set<BenchMesh>;
 
     public readonly objFileInput: HTMLInputElement;
     public readonly wireframeToggleBtn: HTMLButtonElement;
@@ -32,8 +32,9 @@ class App {
         this.raycaster = new Raycaster();
         this.mouse = new Vector2();
         // Objects
-        this.models = new Set<BenchModel>();
-        this.selected = new Set<BenchModel>();
+        this.model = new BenchModel();
+        this.scene.add(this.model);
+        this.selected = new Set<BenchMesh>();
         this.objFileInput = document.getElementById("objLoader") as HTMLInputElement;
         this.wireframeToggleBtn = document.getElementById("wireframeToggleBtn") as HTMLButtonElement;
         // GUI
@@ -61,32 +62,9 @@ class App {
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            const interacted = this.getInteracting();
-            const wireframeEnabled = this.isWireframeEnabled();
-            
-            if (null != interacted) {
-                if (false == event.ctrlKey) {
-                    // Single Selection
-                    if (wireframeEnabled) {
-                        for (const model of this.selected) {
-                            model.setHighlight(false);
-                        }
-                        interacted.setHighlight(true);
-                    }
-                    this.selected.clear();
-                    this.selected.add(interacted);
-                } else {
-                    if (wireframeEnabled) interacted.toggleHighlight();
-                    if (this.selected.has(interacted)) {
-                        this.selected.delete(interacted);
-                    } else {
-                        this.selected.add(interacted);
-                    }
-                }
-            }
-
+            const interacted = this.model.onInteract(this.raycaster);
+            if (interacted) this.selected.add(interacted)
         });
 
         // KeyBoard
@@ -94,7 +72,7 @@ class App {
             if (event.key === 'Delete') {
                 for (const model of this.selected) {
                     this.scene.remove(model);
-                    this.models.delete(model);
+                    this.model.clear();
                 }
                 this.selected.clear();
             }
@@ -104,11 +82,7 @@ class App {
         this.objFileInput.addEventListener("change", () => {
             const arrangedList = FileUtil.arrangeObjMtl(this.objFileInput.files);
             if (!arrangedList) return;
-            const model: BenchModel = BenchModel.load(arrangedList!, this.loadingUI);
-            FileUtil.loadObj(arrangedList).then((obj) => console.log(obj));
-            //model.setHighlight(true);
-            this.models.add(model);
-            this.scene.add(model);
+            this.model.fromObjFile(arrangedList, this.loadingUI);
             // Enable Multiple Loading of Same File
             this.objFileInput.value = "";
         });
@@ -117,27 +91,18 @@ class App {
             const isChecked = !(this.wireframeToggleBtn.dataset.checked === "true");
             this.wireframeToggleBtn.dataset.checked = isChecked.toString();
             if (isChecked) {
-                this.selected.forEach((model) => {
-                    model.setHighlight(true);
-                })
+
             } else {
-                this.models.forEach((model) => {
-                    model.setHighlight(false);
-                })
+
             }
         });
 
-        document.addEventListener("DOMContentLoaded", () => {
-            const onMergeVertices = document.getElementById("mergeVerticesButton");
-            if (onMergeVertices) {
-                onMergeVertices.addEventListener("click", () => {
-                    this.selected.forEach((model) => {
-                        model.children[0].merge();
-                        model.children[0].recreateWireframe();
-                    })
-                });
-            }
-        });
+        const onMergeVertices = document.getElementById("mergeVerticesButton");
+        if (onMergeVertices) {
+            onMergeVertices.addEventListener("click", () => {
+                //this.model.selected.
+            });
+        }
     }
 
     public update(): void {
@@ -146,17 +111,6 @@ class App {
         this.renderer.composer.render();
     }
 
-    private isWireframeEnabled(): boolean {
-        return this.wireframeToggleBtn.dataset.checked === "true";
-    }
-
-    private getInteracting(): BenchModel | null {
-        for (const model of this.models) {
-            const hit = model.intersects(this.raycaster);
-            if (hit) return model;
-        }
-        return null;
-    }
 }
 
 ColorManagement.enabled = true;
