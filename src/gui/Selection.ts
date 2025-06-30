@@ -9,26 +9,28 @@ import {
     Vector3, 
     type Intersection
 } from "three";
-import { GeometryUtil } from "../util/GeometryUtil";
+import { BenchTriangle } from "../util/GeometryUtil";
 
 class SelectedFace extends Mesh {
-    public readonly sourceMesh: Mesh;
+    public readonly srcMesh: Mesh;
+    
     constructor(src: Mesh) {
+        const [ color, opacity ] = window.config.selection.faceColor;
         super(new BufferGeometry(), 
             new MeshBasicMaterial({
-                color: 0xffff00, 
+                color: color, 
                 side: DoubleSide,
                 transparent: true,
-                opacity: 0.5
+                opacity: opacity
             }));
-        this.sourceMesh = src;
+        this.srcMesh = src;
         this.visible = false;
     }
 
     public update(isect: Intersection) {
         if (isect.face) {
             // Create triangle geometry
-            const tri = GeometryUtil.getTriangleByFace(this.sourceMesh.geometry, isect.face);
+            const tri = BenchTriangle.of(this.srcMesh.geometry, isect.face);
             this.geometry.setFromPoints([tri.a, tri.b, tri.c]);
             this.geometry.setIndex([0, 1, 2]);
         }
@@ -36,26 +38,28 @@ class SelectedFace extends Mesh {
 }
 
 class SelectedPlane extends Mesh  {
-    public readonly sourceMesh: Mesh;
+    public readonly srcMesh: Mesh;
     constructor(src: Mesh) {
+        const [ color, opacity ] = window.config.selection.coplaneColor;
+        const config = window.config.selection;
         super(new BufferGeometry(), 
             new MeshBasicMaterial({
-                color: 0xffff00, 
+                color: color, 
                 side: DoubleSide,
                 transparent: true,
-                opacity: 0.5
+                opacity: opacity
             }));
-        this.sourceMesh = src;
+        this.srcMesh = src;
         this.visible = false;
     }
 
     public update(isect: Intersection) {
         if (!isect.faceIndex) return;
 
-        const COPLANAR_TOLERANCE = 0.05;
-        const NORMAL_TOLERANCE = 0.01;
+        const COPLANAR_TOLERANCE = 0.02;
+        const NORMAL_TOLERANCE = 0.5;
 
-        const geometry = this.sourceMesh.geometry;
+        const geometry = this.srcMesh.geometry;
         const positionAttr = geometry.getAttribute('position');
 
         const triangleCount = positionAttr.count / 3;
@@ -69,19 +73,20 @@ class SelectedPlane extends Mesh  {
             const c = new Vector3().fromBufferAttribute(positionAttr, i * 3 + 2);
             return new Triangle(a, b, c);
         };
+        
 
         // Build edge → triangle index map
         const edgeMap = new Map<string, number[]>();
         for (let i = 0; i < triangleCount; i++) {
             const tri = getTriangle(i);
             const edges = [
-            triangleKey(tri.a, tri.b),
-            triangleKey(tri.b, tri.c),
-            triangleKey(tri.c, tri.a)
+                triangleKey(tri.a, tri.b),
+                triangleKey(tri.b, tri.c),
+                triangleKey(tri.c, tri.a)
             ];
             for (const edge of edges) {
-            if (!edgeMap.has(edge)) edgeMap.set(edge, []);
-            edgeMap.get(edge)!.push(i);
+                if (!edgeMap.has(edge)) edgeMap.set(edge, []);
+                edgeMap.get(edge)!.push(i);
             }
         }
 

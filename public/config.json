@@ -1,0 +1,11 @@
+{
+    "selection": {
+        "faceColor": ["#ffff00", 0.5],
+        "coplaneColor": ["#ffff00", 0.5]
+    },
+    "grid": {
+        "blockColor": "#FFFFFF",
+        "unitColor": "#AAAAAA",
+        "originPlaneColor": ["#ffffff", 0.1]
+    }
+}

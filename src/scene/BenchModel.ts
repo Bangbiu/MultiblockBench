@@ -116,19 +116,22 @@ class BenchMesh extends Group {
         this.mesh = loadedMesh;
         this.name = loadedMesh.name;
         this.add(this.mesh);
-        this.wireframe = null;
+        this.wireframe = null;// new LineSegments(new LineGeometry(), );
+        
         // Face Selection
         this.selFace = new SelectedFace(loadedMesh);
         this.selPlane = new SelectedPlane(loadedMesh);
         this.add(this.selFace);
         this.add(this.selPlane);
+
+
     }
 
     public createWireframe(): void {
         // Lazy Loading   
         if (this.wireframe) return;
         // Wireframe overlay from same geometry
-        const wireframe = GeometryUtil.createWireFrame(this.mesh.geometry);
+        const wireframe = GeometryUtil.createWireframe(this.mesh.geometry);
         if (wireframe) {
             this.wireframe = wireframe;
             this.add(wireframe);

@@ -1,12 +1,24 @@
-import { AxesHelper, BoxGeometry, DoubleSide, GridHelper, Group, Mesh, MeshBasicMaterial, MeshStandardMaterial, PlaneGeometry } from "three";
+import { 
+    AxesHelper, 
+    BoxGeometry, 
+    DoubleSide, 
+    GridHelper, 
+    Group, 
+    Mesh, 
+    MeshBasicMaterial, 
+    MeshStandardMaterial, 
+    PlaneGeometry 
+} from "three";
+
 
 class BenchGrid extends Group {
     constructor() {
         super();
+        const config = window.config.grid;
         // Grid helper on the XZ plane 1m per block segment
-        this.add(new GridHelper(160, 160, 0xAAAAAA, 0xAAAAAA));
+        this.add(new GridHelper(160, 160, config.unitColor, config.unitColor));
         // Grid helper on the XZ plane 16m per block
-        this.add(new GridHelper(160, 10, 0xFFFFFF, 0xFFFFFF));
+        this.add(new GridHelper(160, 10, config.blockColor, config.blockColor));
         
         // Axes helper to visualize X, Y, Z
         this.add(new AxesHelper(80));
@@ -16,9 +28,9 @@ class BenchGrid extends Group {
         const plane = new Mesh(
             new PlaneGeometry(planeSize, planeSize),
             new MeshBasicMaterial({
-                color: 0xffffff,
+                color: config.originPlaneColor[0],
                 transparent: true,
-                opacity: 0.1,         // make it faint
+                opacity: config.originPlaneColor[1],         // make it faint
                 side: DoubleSide
             })
         );

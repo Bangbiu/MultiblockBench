@@ -2,9 +2,10 @@ import { FullScreenCamera, BenchRenderer, ModelOrbitalControl } from './scene/Be
 import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
 import { BenchMesh, BenchModel } from './scene/BenchModel';
-import { Color, ColorManagement, Raycaster, Scene, Vector2 } from 'three';
+import { Color, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
+import { bootstrap } from './bootstrap';
 
 class App {
     // Render
@@ -64,7 +65,10 @@ class App {
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera);
             const interacted = this.model.onInteract(this.raycaster);
-            if (interacted) this.selected.add(interacted)
+            if (interacted) {
+                this.selected.clear();
+                this.selected.add(interacted);
+            }
         });
 
         // KeyBoard
@@ -113,14 +117,23 @@ class App {
 
 }
 
-ColorManagement.enabled = true;
-const app = new App();
-app.init();
-
-
-function loop(): void {
-    app.update();
-    requestAnimationFrame(loop);
+// Global Var
+declare global {
+  interface Window {
+    app: App;
+  }
 }
 
-loop();
+function main() {
+    const app = new App();
+    app.init();
+    window.app = app;
+    function loop(): void {
+        app.update();
+        requestAnimationFrame(loop);
+    }
+    
+    loop();
+}
+
+bootstrap().then(main);

@@ -1,5 +1,16 @@
-import { ACESFilmicToneMapping, PerspectiveCamera, Scene, SRGBColorSpace, Vector2, Vector3, WebGLRenderer } from 'three';
-import { EffectComposer, OrbitControls, OutlinePass, RenderPass } from 'three-stdlib';
+import { 
+    PerspectiveCamera, 
+    Scene, 
+    Vector2, 
+    Vector3, 
+    WebGLRenderer 
+} from 'three';
+
+import { EffectComposer, 
+    OrbitControls, 
+    OutlinePass, 
+    RenderPass 
+} from 'three-stdlib';
 
 class BenchRenderer extends WebGLRenderer {
     public readonly composer;

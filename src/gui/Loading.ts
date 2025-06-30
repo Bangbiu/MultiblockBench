@@ -177,7 +177,7 @@ class TaskSequence {
         if (this.lastTask) {
             this.lastTask.handler.onLoad = () => {
                 if (name) curTask.handler.onStart(0, name);
-                setTimeout(() => curTask.job(curTask.handler), TaskSequence.TIME_PADDING);
+                curTask.job(curTask.handler);
             };
         }
         this.lastTask = curTask;

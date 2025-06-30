@@ -1,7 +1,42 @@
-import { BufferGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, Mesh, Triangle, Vector3, WireframeGeometry, type Face, type Intersection } from "three";
+import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, Mesh, Triangle, Vector2, Vector3, WireframeGeometry, type Face, type Intersection } from "three";
 import { mergeBufferGeometries } from "three-stdlib";
+import GeometryWorker from '../worker/GeometryWorker?worker';
+type GeometryFunctionName = keyof typeof GeometryUtil;
 
-export class GeometryUtil {
+class BenchTriangle extends Triangle {
+    public readonly uva: Vector2;
+    public readonly uvb: Vector2;
+    public readonly uvc: Vector2;
+    public readonly matIndex: number;
+    constructor(geometry: BufferGeometry, face: Face) {
+        super();
+        const pos = geometry.attributes.position;
+        const uv = geometry.attributes.uv as BufferAttribute;
+        super.setFromAttributeAndIndices(pos, face.a, face.b, face.c);
+        this.uva = new Vector2().fromBufferAttribute(uv, face.a);
+        this.uvb = new Vector2().fromBufferAttribute(uv, face.b);
+        this.uvc = new Vector2().fromBufferAttribute(uv, face.c);
+        this.matIndex = face.materialIndex;
+    }
+    
+    public static getFaceMaterialIndices(geometry: BufferGeometry): number[] {
+        const result: number[] = [];
+        for (const group of geometry.groups) {
+            const faceStart = group.start / 3;
+            const faceCount = group.count / 3;
+            for (let i = 0; i < faceCount; i++) {
+                result[faceStart + i] = group.materialIndex!;
+            }
+        }
+        return result;
+    }
+
+    public static of(geometry: BufferGeometry, face: Face) {
+        return new BenchTriangle(geometry, face);
+    }
+}
+
+class GeometryUtil {
 
     public static extractGeometry(loadedObj: Group): BufferGeometry | null {
         const geometries: BufferGeometry[] = [];
@@ -19,7 +54,7 @@ export class GeometryUtil {
         return mergedGeometry;
     }
 
-    public static createWireFrame(geometry: BufferGeometry) {
+    public static createWireframe(geometry: BufferGeometry) {
         if (!geometry) return null;
         const wireframeGeometry = new WireframeGeometry(geometry);
         const wireframe = new LineSegments(
@@ -90,12 +125,34 @@ export class GeometryUtil {
         return newGeom;
     }
 
-    public static getTriangleByFace(geometry: BufferGeometry, face: Face): Triangle {
-        const position = geometry.attributes.position;
-        return new Triangle(
-            new Vector3().fromBufferAttribute(position, face.a),
-            new Vector3().fromBufferAttribute(position, face.b),
-            new Vector3().fromBufferAttribute(position, face.c)
-        )
+    public static print() {
+        console.log("run");
     }
+
+    public static async run<T = any>(fn: GeometryFunctionName, payload: any[]): Promise<T> {
+        const worker = new GeometryWorker();
+        return new Promise((resolve, reject) => {
+            worker.onmessage = (e) => {
+                if (e.data.error) 
+                    reject(e.data.error);
+                else 
+                    resolve(e.data.result);
+            };
+
+            worker.onerror = reject;
+
+            worker.postMessage({ 
+                fn, payload 
+            });
+        });
+    }
+}
+
+export type {
+    GeometryFunctionName
+}
+
+export {
+    GeometryUtil,
+    BenchTriangle
 }
