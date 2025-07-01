@@ -1,14 +1,16 @@
 import { 
     Group, 
+    LineBasicMaterial, 
     LineSegments, 
     Mesh, 
     Raycaster,
     Vector3,
+    WireframeGeometry,
     type Intersection,
 } from 'three';
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
-import { Intepretors, LoadingUI, type SubEventHandler } from '../gui/Loading';
+import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
 import { GeometryUtil } from '../util/GeometryUtil';
 import { SelectedFace, SelectedPlane } from '../gui/Selection';
 
@@ -31,6 +33,18 @@ class BenchModel extends Group {
         return this;
     }
 
+    public async load(fileList: ArrangedFiles, loadingUI: LoadingUI) {
+        this.clear();
+        loadingUI.onStart();
+        await loadingUI.startProcess("Loading Bench Model")
+        .then("Obj File", 
+            (handler) => this.fromObjFile(fileList, handler)
+        ).finally("Wireframe", (handler) => {
+            this.createWireframe(handler);
+        })
+        .work();
+    }
+
     public fromGroup(group: Group) {
         this.clear();
         for (const obj of group.children) {
@@ -39,18 +53,9 @@ class BenchModel extends Group {
         }
     }
 
-    public fromObjFile(fileList: ArrangedFiles, loadingUI: LoadingUI): void {
-        this.clear();
-        loadingUI.onStart();
-        loadingUI.startProcess()
-        .then("Obj File Loading", 
-            (handler) => {
-                FileUtil.loadObj(fileList, handler).then((group) => (this.fromGroup(group)))
-            },
-            Intepretors.ObjProg
-        ).finally("Creating Wire Frame", 
-            this.createWireframe.bind(this)
-        ).work();
+    public async fromObjFile(fileList: ArrangedFiles, handler: SubTaskHandler) {
+        const group = await FileUtil.loadObj(fileList, handler)
+        this.fromGroup(group);
     }
 
     public onInteract(raycaster: Raycaster): BenchMesh | undefined {
@@ -67,6 +72,18 @@ class BenchModel extends Group {
         }
         // Closest Intersections
         return isectedMesh;
+    }
+
+    protected async createWireframe(eventHandler?: SubTaskHandler) {
+        for (let index = 0; index < this.children.length; index++) {
+            const mesh = this.children[index];
+            eventHandler?.onProgress({ 
+                progess: index / this.children.length,
+                text: "Loading " + mesh.name
+            });
+            await mesh.createWireframe();
+        }
+        eventHandler?.onLoad();
     }
 
     public clearSelection(): this {
@@ -94,14 +111,6 @@ class BenchModel extends Group {
         return isectedMesh;
     }
 
-    protected createWireframe(eventHandler?: SubEventHandler) {
-        this.children.forEach((mesh, index) => { 
-            eventHandler?.onProgress(index / this.children.length, "Loading " + mesh.name);
-            mesh.createWireframe();
-        });
-        eventHandler?.onLoad();
-    }
-
     public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
 }
 
@@ -109,45 +118,37 @@ class BenchMesh extends Group {
     private readonly mesh: Mesh;
     private readonly selFace: SelectedFace;
     private readonly selPlane: SelectedPlane;
-    private wireframe: LineSegments | null;
+    private readonly wireframe: LineSegments;
 
     constructor(loadedMesh: Mesh) {
         super();
+        const config = window.config.model;
         this.mesh = loadedMesh;
         this.name = loadedMesh.name;
         this.add(this.mesh);
-        this.wireframe = null;// new LineSegments(new LineGeometry(), );
-        
+
+        // Wireframe
+        this.wireframe = new LineSegments();
+        this.wireframe.material = new LineBasicMaterial({
+            color: config.wireframeColor,
+            linewidth: config.wireframeLineWidth
+        })
+        // Set render order to draw on top
+        this.wireframe.renderOrder = 1;
+        this.add(this.wireframe);
+
         // Face Selection
         this.selFace = new SelectedFace(loadedMesh);
         this.selPlane = new SelectedPlane(loadedMesh);
         this.add(this.selFace);
         this.add(this.selPlane);
-
-
     }
 
-    public createWireframe(): void {
-        // Lazy Loading   
-        if (this.wireframe) return;
+    public async createWireframe() {
         // Wireframe overlay from same geometry
-        const wireframe = GeometryUtil.createWireframe(this.mesh.geometry);
-        if (wireframe) {
-            this.wireframe = wireframe;
-            this.add(wireframe);
-            this.showWireframe(false);
-        }
-    }
-
-    public updateWireframe(): void {
-        let visible = false;
-        if (this.wireframe) {
-            visible = this.wireframe.visible;
-            this.remove(this.wireframe);
-            this.wireframe = null;
-        }
-        this.createWireframe();
-        this.showWireframe(visible);
+        this.wireframe.geometry = await GeometryUtil.run<WireframeGeometry>("createWireframe", this.mesh.geometry);
+        //wireframe.material.depthTest = false; // makes it draw over the mesh
+        this.showWireframe(false);
     }
 
     public getIntersection(raycaster: Raycaster): Intersection | undefined {
@@ -178,6 +179,11 @@ class BenchMesh extends Group {
     }
 }
 
+async function timeout(sec: number) {
+    return new Promise<void>((resolve) => {
+        setTimeout(resolve, sec);
+    });
+}
 
 export {
     BenchModel,

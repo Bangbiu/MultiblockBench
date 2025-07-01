@@ -5,3 +5,4 @@ declare module "*?worker" {
   };
   export default WorkerFactory;
 }
+

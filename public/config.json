@@ -7,5 +7,9 @@
         "blockColor": "#FFFFFF",
         "unitColor": "#AAAAAA",
         "originPlaneColor": ["#ffffff", 0.1]
+    },
+    "model": {
+        "wireframeColor": "#ffff00",
+        "wireframeLineWidth": 1
     }
 }

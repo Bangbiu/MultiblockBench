@@ -1,4 +1,14 @@
-import { BufferAttribute, BufferGeometry, Float32BufferAttribute, Group, LineBasicMaterial, LineSegments, Mesh, Triangle, Vector2, Vector3, WireframeGeometry, type Face, type Intersection } from "three";
+import { 
+    BufferAttribute, 
+    BufferGeometry, 
+    Group, 
+    Mesh, 
+    Triangle, 
+    Vector2, 
+    Vector3, 
+    WireframeGeometry, 
+    type Face, 
+} from "three";
 import { mergeBufferGeometries } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
 type GeometryFunctionName = keyof typeof GeometryUtil;
@@ -54,89 +64,31 @@ class GeometryUtil {
         return mergedGeometry;
     }
 
-    public static createWireframe(geometry: BufferGeometry) {
-        if (!geometry) return null;
-        const wireframeGeometry = new WireframeGeometry(geometry);
-        const wireframe = new LineSegments(
-            wireframeGeometry,
-            new LineBasicMaterial({
-                color: 0xffff00,
-                linewidth: 1 // note: linewidth may not work in all browsers
-            })
-        );
-        // Set render order to draw on top
-        wireframe.renderOrder = 1;
-        //wireframe.material.depthTest = false; // makes it draw over the mesh
-        return wireframe;
+    public static createWireframe(geometry: BufferGeometry): WireframeGeometry {
+        return new WireframeGeometry(geometry);
     }
 
-    public static mergeVerticesWithNormals(geometry: BufferGeometry, normalThreshold = 0.01): BufferGeometry {
-        // Step 1: Ensure indexed geometry
-        geometry = geometry.toNonIndexed();
-        const posAttr = geometry.getAttribute('position');
-        const faceCount = posAttr.count / 3;
-
-        // Helper to get face normal
-        function getFaceNormal(i: number): Vector3 {
-            const a = new Vector3().fromBufferAttribute(posAttr, i * 3);
-            const b = new Vector3().fromBufferAttribute(posAttr, i * 3 + 1);
-            const c = new Vector3().fromBufferAttribute(posAttr, i * 3 + 2);
-            const cb = new Vector3().subVectors(c, b);
-            const ab = new Vector3().subVectors(a, b);
-            return cb.cross(ab).normalize();
+    private static isUniqueEdge(start: Vector3, end: Vector3, edges: Set<string>) {
+        const hash1 = `${start.x},${start.y},${start.z}-${end.x},${end.y},${end.z}`;
+        const hash2 = `${end.x},${end.y},${end.z}-${start.x},${start.y},${start.z}`;
+        if (edges.has(hash1) === true || edges.has(hash2) === true) {
+            return false;
+        } else {
+            edges.add(hash1);
+            edges.add(hash2);
+            return true;
         }
-
-        // Step 2: Group triangles with roughly the same normal
-        type Face = { index: number, normal: Vector3 };
-        const groups: Face[][] = [];
-
-        for (let i = 0; i < faceCount; i++) {
-            const normal = getFaceNormal(i);
-            let added = false;
-            for (const group of groups) {
-            if (group.length > 0 && group[0].normal.dot(normal) > 1 - normalThreshold) {
-                group.push({ index: i, normal });
-                added = true;
-                break;
-            }
-            }
-            if (!added) groups.push([{ index: i, normal }]);
-        }
-
-        // Step 3: Just re-add triangles per group (real minimal triangulation omitted)
-        const newPositions: number[] = [];
-
-        for (const group of groups) {
-            for (const face of group) {
-            for (let j = 0; j < 3; j++) {
-                const idx = face.index * 3 + j;
-                newPositions.push(
-                posAttr.getX(idx),
-                posAttr.getY(idx),
-                posAttr.getZ(idx)
-                );
-            }
-            }
-        }
-
-        const newGeom = new BufferGeometry();
-        newGeom.setAttribute('position', new Float32BufferAttribute(newPositions, 3));
-        newGeom.computeVertexNormals(); // optional for smoothing
-        return newGeom;
     }
 
-    public static print() {
-        console.log("run");
-    }
-
-    public static async run<T = any>(fn: GeometryFunctionName, payload: any[]): Promise<T> {
+    public static async run<T = any>(fn: GeometryFunctionName, ...payload: any[]): Promise<T> {
         const worker = new GeometryWorker();
         return new Promise((resolve, reject) => {
             worker.onmessage = (e) => {
-                if (e.data.error) 
+                if (e.data.error)
                     reject(e.data.error);
                 else 
-                    resolve(e.data.result);
+                    resolve(GeometryUtil.reconstructionOf(e.data.result));
+                
             };
 
             worker.onerror = reject;
@@ -146,7 +98,51 @@ class GeometryUtil {
             });
         });
     }
+
+    public static isSerializedGeometry(obj: any): boolean {
+        return obj &&
+            typeof obj === 'object' && obj.attributes &&
+            obj.attributes.position &&
+            obj.attributes.position.array instanceof Float32Array &&
+            typeof obj.attributes.position.itemSize === 'number';
+    }
+
+    public static geometryOf(src: BufferGeometry) {
+        const geometry = new BufferGeometry();
+        const position = src.attributes.position;
+        const normal = src.attributes.normal;
+        const index = src.attributes.index;
+
+        if (position)
+            geometry.attributes.position = new BufferAttribute(
+                new Float32Array(position.array), position.itemSize);
+
+        if (normal)
+            geometry.attributes.normal = new BufferAttribute(
+                new Float32Array(normal.array), normal.itemSize);
+
+        if (index) 
+            geometry.setIndex(new BufferAttribute(
+                new Uint16Array(index.array), 1));
+        return geometry;
+    }
+
+    public static reconstructionOf(data: any) {
+        if (GeometryUtil.isSerializedGeometry(data)) {
+            return GeometryUtil.geometryOf(data);
+        }
+        return data;
+    }
+
+    public static reconstruct(payload: any[]) {
+        payload.forEach((value, index) => {
+            payload[index] = GeometryUtil.reconstructionOf(value);
+        })
+    }
 }
+
+
+
 
 export type {
     GeometryFunctionName

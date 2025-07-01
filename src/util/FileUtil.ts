@@ -1,6 +1,6 @@
 import { LoadingManager, Group, Mesh, MeshPhongMaterial, Color } from "three";
 import { MTLLoader, OBJLoader, type MaterialCreator } from "three-stdlib";
-import type { ObjProgIntepretor, SubEventHandler } from "../gui/Loading";
+import type { SubTaskHandler } from "../gui/Loading";
 
 type OptFile = File | undefined  | null;
 type ArrangedFiles = [File, OptFile, ...File[]]
@@ -46,7 +46,7 @@ class FileUtil {
         return [objFile, mtlFile, ...fileArr];
     }
 
-    public static async loadObj(fileList: ArrangedFiles, eventHandler?: SubEventHandler<ObjProgIntepretor>): Promise<Group> {
+    public static async loadObj(fileList: ArrangedFiles, eventHandler?: SubTaskHandler): Promise<Group> {
         const objFile: File = fileList[0];
         const mtlFile: OptFile = fileList[1]; 
         const textureFiles: Array<File> = fileList.slice(2) as Array<File>;
@@ -55,7 +55,13 @@ class FileUtil {
         const objURL = URL.createObjectURL(objFile);
         if (eventHandler) {
             // Binding UI
-            eventHandler.handle(manager);
+            manager.onStart = (url, loaded, total) => 
+                eventHandler.onStart({ 
+                    progess: loaded / total, 
+                    text: "Loading " + FileUtil.getFileName(url) 
+                });
+            manager.onProgress = manager.onStart;
+            manager.onLoad = eventHandler.onLoad;
         }
         
         if (mtlFile) {

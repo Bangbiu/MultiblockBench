@@ -7,6 +7,13 @@ import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
 
+// Global Var
+declare global {
+  interface Window {
+    app: App;
+  }
+}
+
 class App {
     // Render
     public readonly renderer: BenchRenderer;
@@ -17,7 +24,6 @@ class App {
     public readonly raycaster: Raycaster;
     public readonly mouse: Vector2;
     public readonly model: BenchModel;
-    public readonly selected: Set<BenchMesh>;
 
     public readonly objFileInput: HTMLInputElement;
     public readonly wireframeToggleBtn: HTMLButtonElement;
@@ -35,7 +41,6 @@ class App {
         // Objects
         this.model = new BenchModel();
         this.scene.add(this.model);
-        this.selected = new Set<BenchMesh>();
         this.objFileInput = document.getElementById("objLoader") as HTMLInputElement;
         this.wireframeToggleBtn = document.getElementById("wireframeToggleBtn") as HTMLButtonElement;
         // GUI
@@ -64,21 +69,13 @@ class App {
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            const interacted = this.model.onInteract(this.raycaster);
-            if (interacted) {
-                this.selected.clear();
-                this.selected.add(interacted);
-            }
+            this.model.onInteract(this.raycaster);
         });
 
         // KeyBoard
         document.addEventListener("keyup", (event) => {
             if (event.key === 'Delete') {
-                for (const model of this.selected) {
-                    this.scene.remove(model);
-                    this.model.clear();
-                }
-                this.selected.clear();
+                this.model.clear();
             }
         });
 
@@ -86,7 +83,7 @@ class App {
         this.objFileInput.addEventListener("change", () => {
             const arrangedList = FileUtil.arrangeObjMtl(this.objFileInput.files);
             if (!arrangedList) return;
-            this.model.fromObjFile(arrangedList, this.loadingUI);
+            this.model.load(arrangedList, this.loadingUI);
             // Enable Multiple Loading of Same File
             this.objFileInput.value = "";
         });
@@ -95,9 +92,11 @@ class App {
             const isChecked = !(this.wireframeToggleBtn.dataset.checked === "true");
             this.wireframeToggleBtn.dataset.checked = isChecked.toString();
             if (isChecked) {
-
+                this.model.showWireframe = true;
+                this.model.selected?.showWireframe(true);
             } else {
-
+                this.model.showWireframe = false;
+                this.model.selected?.showWireframe(false);
             }
         });
 
@@ -110,19 +109,13 @@ class App {
     }
 
     public update(): void {
-        this.renderer.outlinePass.selectedObjects = Array.from(this.selected);
+        this.renderer.outlinePass.selectedObjects = this.model.selected ? [this.model.selected] : [];
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
     }
 
 }
 
-// Global Var
-declare global {
-  interface Window {
-    app: App;
-  }
-}
 
 function main() {
     const app = new App();
@@ -132,7 +125,7 @@ function main() {
         app.update();
         requestAnimationFrame(loop);
     }
-    
+
     loop();
 }
 
