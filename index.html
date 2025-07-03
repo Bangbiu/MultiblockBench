@@ -1,47 +1,49 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MultiblockBench</title>
-    <link rel="stylesheet" href="style.css" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>MultiblockBench</title>
+        <link rel="stylesheet" href="style.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
   </head>
 
   <body>
     <!-- Loading Overlay -->
     <div id="loadingOverlay">
-      <div class="loadingContent">
-        <div class="spinner"></div>
-        <div class="progressBarContainer">
-          <div class="progressBar" id="progressBar"></div>
+        <div class="loadingContent">
+            <div class="spinner"></div>
+            <div class="progressBarContainer">
+            <div class="progressBar" id="progressBar"></div>
+            </div>
+            <div class="loadingText" id="progressLabel">Loading 0%</div>
         </div>
-        <div class="loadingText" id="progressLabel">Loading 0%</div>
-      </div>
     </div>
     <!-- Menu Panel -->
     <div id="menu">
-      <button onclick="document.getElementById('objLoader').click()">
-        <i class="fas fa-file-import"></i>
-      </button>
-
-      <button>
-        <i class="fa-solid fa-download"></i>
-      </button>
-      <button id="mergeVerticesButton">
-        <i class="fa-solid fa-cubes"></i>
-      </button>
-      <input type="file" id="objLoader" multiple/>
+        <button onclick="document.getElementById('objLoader').click()">
+            <i class="fas fa-file-import"></i>
+        </button>
+        <button>
+            <i class="fa-solid fa-download"></i>
+        </button>
+        <button id="mergeVerticesButton">
+            <i class="fa-solid fa-cubes"></i>
+        </button>
+        <label class="toggle">
+            <input type="checkbox" id="wireframeCheckbox" checked = true/>
+            <span class="toggle-button">
+                <i class="fa-solid fa-crop"></i>
+            </span>
+        </label>
+        <input type="file" id="objLoader" multiple/>
     </div>
 
     <!-- Tool Bar -->
     <div id="toolBar">
-      <button id="wireframeToggleBtn" data-checked="true">
-        <i class="fa-solid fa-crop"></i>
-      </button>
-      <button>
-        <i class="fa-solid fa-download"></i>
-      </button>
+        <button>
+            <i class="fa-solid fa-download"></i>
+        </button>
     </div>
 
     <!-- Three.js Script -->

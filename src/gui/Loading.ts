@@ -103,7 +103,7 @@ class SubTaskHandler implements Progressable {
         });
         if (this.lastSub != this) {
             this.lastSub.onLoad = () => {
-                if (handler.name) handler.onStart({ progess: 0, text: handler.name});
+                if (handler.name) handler.onStart({ progess: 0, text: ""});
                 handler.work();
             };
         }

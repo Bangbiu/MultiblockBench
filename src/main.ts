@@ -1,11 +1,12 @@
 import { FullScreenCamera, BenchRenderer, ModelOrbitalControl } from './scene/BenchRender';
 import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
-import { BenchMesh, BenchModel } from './scene/BenchModel';
+import { BenchModel } from './scene/BenchModel';
 import { Color, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
+
 
 // Global Var
 declare global {
@@ -24,10 +25,9 @@ class App {
     public readonly raycaster: Raycaster;
     public readonly mouse: Vector2;
     public readonly model: BenchModel;
-
-    public readonly objFileInput: HTMLInputElement;
-    public readonly wireframeToggleBtn: HTMLButtonElement;
     // GUI
+    public readonly objFileInput: HTMLInputElement;
+    public readonly wireframeCheckbox: HTMLInputElement;
     public readonly loadingUI: LoadingUI;
 
     constructor() {
@@ -41,15 +41,18 @@ class App {
         // Objects
         this.model = new BenchModel();
         this.scene.add(this.model);
-        this.objFileInput = document.getElementById("objLoader") as HTMLInputElement;
-        this.wireframeToggleBtn = document.getElementById("wireframeToggleBtn") as HTMLButtonElement;
         // GUI
+        this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
+        this.wireframeCheckbox = App.loadElement("wireframeCheckbox") as HTMLInputElement;
         this.loadingUI = new LoadingUI();
+
+        App.INSTANCE = this;
     }
 
-    public init(): void {
+    public init(): this {
         this.createScene();
         this.registerEvents();
+        return this;
     }
 
     public createScene(): Scene {
@@ -61,7 +64,7 @@ class App {
         return scene;
     }
 
-    public registerEvents(): void {
+    public registerEvents(): this {
         // Mouse
         document.addEventListener("mousedown", (event) => {
             if (event.button == 2) return;
@@ -69,14 +72,12 @@ class App {
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            this.model.onInteract(this.raycaster);
+            this.model.select(this.raycaster);
         });
 
         // KeyBoard
         document.addEventListener("keyup", (event) => {
-            if (event.key === 'Delete') {
-                this.model.clear();
-            }
+            if (event.key === 'Delete') this.model.clear();
         });
 
         // Menu
@@ -88,34 +89,32 @@ class App {
             this.objFileInput.value = "";
         });
 
-        this.wireframeToggleBtn.addEventListener("click", () => {
-            const isChecked = !(this.wireframeToggleBtn.dataset.checked === "true");
-            this.wireframeToggleBtn.dataset.checked = isChecked.toString();
-            if (isChecked) {
-                this.model.showWireframe = true;
-                this.model.selected?.showWireframe(true);
-            } else {
-                this.model.showWireframe = false;
-                this.model.selected?.showWireframe(false);
-            }
-        });
+        App.connect(this.wireframeCheckbox, this.model, "showWireframe");
 
-        const onMergeVertices = document.getElementById("mergeVerticesButton");
-        if (onMergeVertices) {
-            onMergeVertices.addEventListener("click", () => {
-                //this.model.selected.
-            });
-        }
+        return this;
     }
 
     public update(): void {
-        this.renderer.outlinePass.selectedObjects = this.model.selected ? [this.model.selected] : [];
+        this.renderer.outlinePass.selectedObjects = this.model.selection ? [this.model.selection.mesh] : [];
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
     }
 
-}
+    public static connect<T, K extends BooleanKeys<T>>(checkbox: HTMLInputElement, obj: T, property: K): void {
+        if (checkbox.type === "checkbox") {
+            checkbox.checked = obj[property] as boolean;
+            checkbox.addEventListener("change", () => {
+                obj[property] = checkbox.checked as T[K]; // safe cast
+            });
+        }
+    }
 
+    public static loadElement(id: string) {
+        return document.getElementById(id);
+    }
+
+    public static INSTANCE?: App;
+}
 
 function main() {
     const app = new App();

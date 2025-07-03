@@ -9,7 +9,7 @@
         "originPlaneColor": ["#ffffff", 0.1]
     },
     "model": {
-        "wireframeColor": "#ffff00",
+        "wireframeColor": "#EEEEEE",
         "wireframeLineWidth": 1
     }
 }

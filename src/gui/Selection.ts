@@ -1,47 +1,55 @@
 import { 
     BufferGeometry, 
     DoubleSide, 
-    Float32BufferAttribute, 
+    Group, 
     Mesh, 
-    MeshBasicMaterial, 
-    Plane, 
-    Triangle, 
-    Vector3, 
-    type Intersection
+    MeshBasicMaterial,  
 } from "three";
-import { BenchTriangle } from "../util/GeometryUtil";
+import { BenchTriangle, GeometryUtil } from "../util/GeometryUtil";
+import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
+
+
+class Selection extends Group {
+    public readonly face: SelectedFace;
+    public readonly coplane: SelectedPlane;
+    public readonly mesh: BenchMesh;
+    constructor(intersection: BenchIntersection) {
+        super();
+        this.mesh = intersection.mesh;
+
+        this.face = new SelectedFace(intersection);
+        this.coplane = new SelectedPlane(intersection);
+
+        this.add(this.face);
+        this.add(this.coplane);
+    }
+}
 
 class SelectedFace extends Mesh {
-    public readonly srcMesh: Mesh;
-    
-    constructor(src: Mesh) {
+    constructor(intersection: BenchIntersection) {
+        super();
         const [ color, opacity ] = window.config.selection.faceColor;
-        super(new BufferGeometry(), 
-            new MeshBasicMaterial({
+        this.material = new MeshBasicMaterial({
                 color: color, 
                 side: DoubleSide,
                 transparent: true,
                 opacity: opacity
-            }));
-        this.srcMesh = src;
-        this.visible = false;
-    }
-
-    public update(isect: Intersection) {
-        if (isect.face) {
+            });
+        const isect = intersection.isect;
+        const srcMesh = isect.object as Mesh;
+        if (srcMesh.isMesh && isect.face) {
             // Create triangle geometry
-            const tri = BenchTriangle.of(this.srcMesh.geometry, isect.face);
-            this.geometry.setFromPoints([tri.a, tri.b, tri.c]);
-            this.geometry.setIndex([0, 1, 2]);
+            const tri = BenchTriangle.of(srcMesh.geometry, isect.face);
+            this.geometry = tri.createGeometry();
         }
+
+        this.visible = true;
     }
 }
 
 class SelectedPlane extends Mesh  {
-    public readonly srcMesh: Mesh;
-    constructor(src: Mesh) {
+    constructor(intersection: BenchIntersection) {
         const [ color, opacity ] = window.config.selection.coplaneColor;
-        const config = window.config.selection;
         super(new BufferGeometry(), 
             new MeshBasicMaterial({
                 color: color, 
@@ -49,103 +57,17 @@ class SelectedPlane extends Mesh  {
                 transparent: true,
                 opacity: opacity
             }));
-        this.srcMesh = src;
-        this.visible = false;
-    }
 
-    public update(isect: Intersection) {
+        const isect = intersection.isect;
         if (!isect.faceIndex) return;
-
-        const COPLANAR_TOLERANCE = 0.02;
-        const NORMAL_TOLERANCE = 0.5;
-
-        const geometry = this.srcMesh.geometry;
-        const positionAttr = geometry.getAttribute('position');
-
-        const triangleCount = positionAttr.count / 3;
-        const visited = new Set<number>();
-        const toVisit = [isect.faceIndex];
-        const resultVertices: number[] = [];
-
-        const getTriangle = (i: number): Triangle => {
-            const a = new Vector3().fromBufferAttribute(positionAttr, i * 3);
-            const b = new Vector3().fromBufferAttribute(positionAttr, i * 3 + 1);
-            const c = new Vector3().fromBufferAttribute(positionAttr, i * 3 + 2);
-            return new Triangle(a, b, c);
-        };
-        
-
-        // Build edge → triangle index map
-        const edgeMap = new Map<string, number[]>();
-        for (let i = 0; i < triangleCount; i++) {
-            const tri = getTriangle(i);
-            const edges = [
-                triangleKey(tri.a, tri.b),
-                triangleKey(tri.b, tri.c),
-                triangleKey(tri.c, tri.a)
-            ];
-            for (const edge of edges) {
-                if (!edgeMap.has(edge)) edgeMap.set(edge, []);
-                edgeMap.get(edge)!.push(i);
-            }
-        }
-
-        const baseTri = getTriangle(isect.faceIndex);
-        const basePlane = new Plane().setFromCoplanarPoints(baseTri.a, baseTri.b, baseTri.c);
-
-        while (toVisit.length > 0) {
-            const current = toVisit.pop()!;
-            if (visited.has(current)) continue;
-            visited.add(current);
-
-            const tri = getTriangle(current);
-            const plane = new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
-
-            const aligned = plane.normal.angleTo(basePlane.normal) < NORMAL_TOLERANCE;
-            const coplanar =
-            Math.abs(basePlane.distanceToPoint(tri.a)) < COPLANAR_TOLERANCE &&
-            Math.abs(basePlane.distanceToPoint(tri.b)) < COPLANAR_TOLERANCE &&
-            Math.abs(basePlane.distanceToPoint(tri.c)) < COPLANAR_TOLERANCE;
-
-            if (!aligned || !coplanar) continue;
-
-            // Add triangle vertices to output
-            resultVertices.push(...tri.a.toArray(), ...tri.b.toArray(), ...tri.c.toArray());
-
-            // Add connected triangles to stack
-            const edges = [
-            triangleKey(tri.a, tri.b),
-            triangleKey(tri.b, tri.c),
-            triangleKey(tri.c, tri.a)
-            ];
-
-            for (const edge of edges) {
-            const neighbors = edgeMap.get(edge)!;
-            for (const neighbor of neighbors) {
-                if (!visited.has(neighbor)) toVisit.push(neighbor);
-            }
-            }
-        }
-
-        if (resultVertices.length === 0) return null;
-
-        // Create output mesh
-        this.geometry.setAttribute(
-            'position',
-            new Float32BufferAttribute(resultVertices, 3)
-        )
-        this.geometry.computeVertexNormals();
+        const srcMesh = isect.object as Mesh;
+        if (!srcMesh.isMesh) return;
+        //this.geometry = GeometryUtil.createCoplanar(srcMesh.geometry, isect.faceIndex);
+        this.geometry = GeometryUtil.createCoplanar(srcMesh.geometry, isect.faceIndex);
+        this.visible = true;
     }
-}
-
-function triangleKey(a: Vector3, b: Vector3): string {
-  // Ensure consistent ordering regardless of direction
-  const hash = (v: Vector3) => `${v.x.toFixed(5)}_${v.y.toFixed(5)}_${v.z.toFixed(5)}`;
-  const ha = hash(a), hb = hash(b);
-  return ha < hb ? `${ha}|${hb}` : `${hb}|${ha}`;
 }
 
 export {
-    SelectedFace,
-    SelectedPlane
+    Selection
 }

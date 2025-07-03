@@ -44,6 +44,49 @@ canvas {
   background-color: #3399ff;
 }
 
+#menu button[data-checked="true"] {
+  background-color: #ff8c00; /* Example checked color */
+}
+
+
+
+#menu .toggle {
+  display: block;
+  width: 100%;
+  margin-bottom: 20px;
+  cursor: pointer;
+}
+
+#menu .toggle input[type="checkbox"] {
+  display: none;
+}
+
+#menu .toggle-button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  font-size: 24px;
+  background-color: #1e90ff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 0;
+  transition: background-color 0.2s ease;
+}
+
+#menu .toggle-button:hover {
+  background-color: #3399ff;
+}
+
+#menu .toggle input[type="checkbox"]:checked + .toggle-button {
+  background-color: #ff8c00;
+}
+
+
+
+
 #objLoader {
   display: none;
 }
@@ -78,10 +121,6 @@ canvas {
 
 #toolBar button:hover {
   background-color: #3399ff;
-}
-
-#toolBar button[data-checked="true"] {
-  background-color: #ff8c00; /* Example checked color */
 }
 
 #loadingOverlay {

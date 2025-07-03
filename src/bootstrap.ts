@@ -3,7 +3,7 @@ type TransparentColor = [string, number]
 interface Config {
     selection: {
         faceColor: TransparentColor,
-        coplaneColor: TransparentColor
+        coplaneColor: TransparentColor,
     },
     grid: {
         blockColor: string,
@@ -11,8 +11,8 @@ interface Config {
         originPlaneColor: TransparentColor
     },
     model: {
-        wireframeColor: string
-        wireframeLineWidth: number
+        wireframeColor: string,
+        wireframeLineWidth: number,
     }
 }
 
