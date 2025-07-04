@@ -1,6 +1,7 @@
 import { 
     BufferAttribute, 
     BufferGeometry, 
+    EdgesGeometry, 
     Group, 
     Mesh, 
     Plane, 
@@ -164,18 +165,19 @@ class IndexedGeometry {
 
 class EdgeGraph extends Map<string, IndexedEdge> {
     public readonly tris: Array<IndexedTri>;
-    public readonly canonical: Map<number, number>;
+    public readonly uniquePosIndex: Array<number>;
     public geometry!: IndexedBufferGeometry;
+
     constructor() {
         super();
         this.tris = new Array();
-        this.canonical = new Map();
+        this.uniquePosIndex = new Array();
     }
 
     public create(geometry: IndexedBufferGeometry): this {
         assertIndexedGeometry(geometry);
         this.geometry = geometry;
-        this.createCanonicalVertexMap();
+        this.createCanonicalIndexArray();
         const indices = this.geometry.index;
         for (let i = 0; i < indices.count; i += 3) {
             const a = indices.getX(i);
@@ -183,9 +185,9 @@ class EdgeGraph extends Map<string, IndexedEdge> {
             const c = indices.getX(i + 2);
 
             // Use canonical position index for edge graph
-            const ca = this.canonical.get(a)!;
-            const cb = this.canonical.get(b)!;
-            const cc = this.canonical.get(c)!;
+            const ca = this.uniquePosIndex[i];
+            const cb = this.uniquePosIndex[i + 1];
+            const cc = this.uniquePosIndex[i + 2];
 
             const e1 = this.getOrPutEdge(ca, cb);
             const e2 = this.getOrPutEdge(cb, cc);
@@ -194,19 +196,47 @@ class EdgeGraph extends Map<string, IndexedEdge> {
             const tri = new IndexedTri(i / 3, [a, b, c], [e1, e2, e3]); // store raw indices
             this.tris.push(tri);
         }
+        console.log(indices.array.length);
+        const uniquePos: Set<number> = new Set();
+        this.uniquePosIndex.forEach(element => {
+            uniquePos.add(element);
+        });
+        
+        console.log(uniquePos);
+        
         return this;
     }
 
-    public createCanonicalVertexMap() {
-        const position = this.geometry.attributes.position;
-        const map = new Map<string, number>();       // pos key → canonical index
-        for (let i = 0; i < position.count; i++) {
-            const key = `${position.getX(i).toFixed(5)}_${position.getY(i).toFixed(5)}_${position.getZ(i).toFixed(5)}`;
-            if (!map.has(key)) {
-                map.set(key, i);
+    public createCanonicalIndexArray(): void {
+        const position = this.geometry.attributes.position as BufferAttribute;
+        const indices = this.geometry.index;
+        const canonicalIndexMap = new Map<string, number>(); // key → canonical index
+        //const canonicalPositions: Vector3[] = [];
+
+        let canonicalCounter = 0;
+
+        for (let i = 0; i < indices.count; i++) {
+            const posIndex = indices.getX(i);
+            const pos = new Vector3().fromBufferAttribute(position, posIndex);
+            const key = vertKey(pos);
+
+            let canonicalIdx = canonicalIndexMap.get(key);
+            if (canonicalIdx === undefined) {
+                canonicalIdx = canonicalCounter++;
+                canonicalIndexMap.set(key, canonicalIdx);
+                //canonicalPositions.push(pos.clone()); // optional: store actual canonical positions
             }
-            this.canonical.set(i, map.get(key)!);
+
+            this.uniquePosIndex.push(canonicalIdx);
         }
+
+        // const canonicalPosAttr = new BufferAttribute(
+        //     new Float32Array(canonicalPositions.length * 3),
+        //     3
+        // );
+        // canonicalPositions.forEach((v, i) => {
+        //     canonicalPosAttr.setXYZ(i, v.x, v.y, v.z);
+        // });
     }
 
     public indexedTriAt(index: number): IndexedTri {
@@ -233,6 +263,7 @@ class EdgeGraph extends Map<string, IndexedEdge> {
             this.set(key, new IndexedEdge(a, b));
         return this.get(key)!;
     }
+
 }
 
 class BenchTriangle extends Triangle {
@@ -485,6 +516,9 @@ function assertIndexedGeometry(geom: BufferGeometry): asserts geom is IndexedBuf
     if (!geom.index) throw new Error("Geometry must be indexed.");
 }
 
+function vertKey(v: Vector3) {
+    return `${v.x.toFixed(5)}_${v.y.toFixed(5)}_${v.z.toFixed(5)}`;
+}
 
 export type {
     GeometryRunnableFunctions,
