@@ -1,6 +1,6 @@
-import { GeometryUtil, type GeometryFunctionName } from "../util/GeometryUtil";
+import { GeometryUtil, type GeometryRunnableFunctions } from "../util/GeometryUtil";
 
-self.onmessage = (e: MessageEvent<{ fn: GeometryFunctionName; payload: any[] }>) => {
+self.onmessage = (e: MessageEvent<{ fn: GeometryRunnableFunctions; payload: any[] }>) => {
     const { fn, payload } = e.data;
     if (typeof GeometryUtil[fn] === 'function') {
         const func = GeometryUtil[fn] as Function;

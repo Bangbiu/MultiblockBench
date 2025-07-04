@@ -5,17 +5,17 @@ import {
     Mesh, 
     MeshBasicMaterial,  
 } from "three";
-import { BenchTriangle, GeometryUtil } from "../util/GeometryUtil";
+import { EdgeGraph, GeometryUtil } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
 
 
 class Selection extends Group {
     public readonly face: SelectedFace;
     public readonly coplane: SelectedPlane;
-    public readonly mesh: BenchMesh;
+    public readonly benchMesh: BenchMesh;
     constructor(intersection: BenchIntersection) {
         super();
-        this.mesh = intersection.mesh;
+        this.benchMesh = intersection.benchMesh;
 
         this.face = new SelectedFace(intersection);
         this.coplane = new SelectedPlane(intersection);
@@ -37,10 +37,9 @@ class SelectedFace extends Mesh {
             });
         const isect = intersection.isect;
         const srcMesh = isect.object as Mesh;
-        if (srcMesh.isMesh && isect.face) {
+        if (srcMesh.isMesh && isect.faceIndex) {
             // Create triangle geometry
-            const tri = BenchTriangle.of(srcMesh.geometry, isect.face);
-            this.geometry = tri.createGeometry();
+            this.geometry = intersection.benchMesh.geometryAt(isect.faceIndex);
         }
 
         this.visible = true;
@@ -50,20 +49,19 @@ class SelectedFace extends Mesh {
 class SelectedPlane extends Mesh  {
     constructor(intersection: BenchIntersection) {
         const [ color, opacity ] = window.config.selection.coplaneColor;
-        super(new BufferGeometry(), 
-            new MeshBasicMaterial({
+        super();
+        this.material = new MeshBasicMaterial({
                 color: color, 
                 side: DoubleSide,
                 transparent: true,
                 opacity: opacity
-            }));
-
+            });
         const isect = intersection.isect;
         if (!isect.faceIndex) return;
         const srcMesh = isect.object as Mesh;
         if (!srcMesh.isMesh) return;
-        //this.geometry = GeometryUtil.createCoplanar(srcMesh.geometry, isect.faceIndex);
-        this.geometry = GeometryUtil.createCoplanar(srcMesh.geometry, isect.faceIndex);
+        this.geometry = GeometryUtil.createCoplanar(
+            intersection.benchMesh.edgeGraph, isect.faceIndex);
         this.visible = true;
     }
 }

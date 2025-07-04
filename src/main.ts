@@ -95,7 +95,7 @@ class App {
     }
 
     public update(): void {
-        this.renderer.outlinePass.selectedObjects = this.model.selection ? [this.model.selection.mesh] : [];
+        this.renderer.outlinePass.selectedObjects = this.model.selection ? [this.model.selection.benchMesh] : [];
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
     }

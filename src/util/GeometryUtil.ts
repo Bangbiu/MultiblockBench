@@ -8,14 +8,17 @@ import {
     Vector2, 
     Vector3, 
     WireframeGeometry, 
-    type Face,
     type TypedArray, 
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
-type GeometryFunctionName = keyof typeof GeometryUtil;
+type RunnableFuncKeys<T> = {
+    [K in keyof T]: T[K] extends (geometry: BufferGeometry) => BufferGeometry ? K : never
+}[keyof T];
+
+type GeometryRunnableFunctions = RunnableFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 
 type SerializedGeometry = {
     attributes: Record<string, SerializedAttribute>;
@@ -30,17 +33,19 @@ type SerializedAttribute = {
     normalized: boolean;
 };
 
+type TriUV = [Vector2, Vector2, Vector2];
 type TriEdges = [IndexedEdge, IndexedEdge, IndexedEdge];
 type TriIndices = [number, number, number];
 type EdgeIndices = [number, number];
+type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
 
 class IndexedEdge {
     // non-Directional
     public readonly indices: EdgeIndices;
-    public readonly faces: Set<IndexedTri>;
+    public readonly tris: Set<IndexedTri>;
     constructor(i1: number, i2: number) {
         // Ensure a is always small
-        this.faces = new Set();
+        this.tris = new Set();
         this.indices = [Math.min(i1, i2), Math.max(i1, i2)];
     }
 
@@ -48,7 +53,7 @@ class IndexedEdge {
     public get b(): number { return this.indices[1]; }
 
     public addFace(face: IndexedTri): this {
-        this.faces.add(face);
+        this.tris.add(face);
         return this;
     }
 
@@ -67,9 +72,11 @@ class IndexedEdge {
 }
 
 class IndexedTri {
+    public readonly index: number;
     public readonly indices: TriIndices;
     public readonly edges: TriEdges;
-    constructor(indices: TriIndices, edges?: TriEdges) {
+    constructor(index: number, indices: TriIndices, edges?: TriEdges) {
+        this.index = index;
         this.indices = indices;
         this.edges = edges ?? IndexedTri.createEdges(this);
         this.connectWithEdges();
@@ -100,13 +107,17 @@ class IndexedTri {
      * Constructs a THREE.Triangle from the indexed triangle using a geometry.
      * Assumes the geometry has a 'position' attribute.
      */
-    public getTriOn(geometry: BufferGeometry): Triangle {
+    public on(geometry: BufferGeometry): Triangle {
         const position = geometry.attributes.position as BufferAttribute;
-        const vA = new Vector3().fromBufferAttribute(position, this.indices[0]);
-        const vB = new Vector3().fromBufferAttribute(position, this.indices[1]);
-        const vC = new Vector3().fromBufferAttribute(position, this.indices[2]);
+        const vA = new Vector3().fromBufferAttribute(position, this.a);
+        const vB = new Vector3().fromBufferAttribute(position, this.b);
+        const vC = new Vector3().fromBufferAttribute(position, this.c);
 
         return new Triangle(vA, vB, vC);
+    }
+
+    public geometryOn(geometry: BufferGeometry) {
+        return GeometryUtil.createTriangleGeometry(this.on(geometry));
     }
 
     public log() {
@@ -114,24 +125,58 @@ class IndexedTri {
     }
 
     public static at(indices: BufferAttribute, index: number) {
-        const a = indices.getX(index);
-        const b = indices.getX(index + 1);
-        const c = indices.getX(index + 2);
-        return new IndexedTri([a, b, c]);
+        const a = indices.getX(index * 3);
+        const b = indices.getX(index * 3 + 1);
+        const c = indices.getX(index * 3 + 2);
+        return new IndexedTri(index, [a, b, c]);
+    }
+}
+
+class IndexedGeometry {
+    public readonly triIndices: Set<number>;
+    constructor(...triIndices: Array<number>) {
+        this.triIndices = new Set();
+        this.add(...triIndices);
+    }
+
+    public get size(): number {
+        return this.triIndices.size;
+    }
+
+    public add(...indices: Array<number>): this {
+        indices.forEach(index => this.triIndices.add(index));
+        return this;
+    }
+
+    public on(edgeGraphOrGeom: EdgeGraph | IndexedBufferGeometry) {
+        const geometries = new Array<IndexedBufferGeometry>();
+        if (edgeGraphOrGeom instanceof EdgeGraph) {
+            const edgeGraph = edgeGraphOrGeom as EdgeGraph;
+            for (const index of this.triIndices) {
+                geometries.push(edgeGraph.geometryAt(index));
+            }
+            return GeometryUtil.mergeIndexedGeometries(geometries);
+        } else {
+            return new BufferGeometry();
+        }
     }
 }
 
 class EdgeGraph extends Map<string, IndexedEdge> {
-    public readonly faces: Array<IndexedTri>;
+    public readonly tris: Array<IndexedTri>;
     public readonly canonical: Map<number, number>;
-    public readonly geometry: BufferGeometry;
-    constructor(geometry: BufferGeometry) {
+    public geometry!: IndexedBufferGeometry;
+    constructor() {
         super();
-        if (!geometry.index) throw new Error("Geometry must be indexed");
+        this.tris = new Array();
+        this.canonical = new Map();
+    }
+
+    public create(geometry: IndexedBufferGeometry): this {
+        assertIndexedGeometry(geometry);
         this.geometry = geometry;
-        this.faces = new Array();
-        this.canonical = GeometryUtil.createCanonicalVertexMap(geometry);
-        const indices = geometry.index;
+        this.createCanonicalVertexMap();
+        const indices = this.geometry.index;
         for (let i = 0; i < indices.count; i += 3) {
             const a = indices.getX(i);
             const b = indices.getX(i + 1);
@@ -146,23 +191,41 @@ class EdgeGraph extends Map<string, IndexedEdge> {
             const e2 = this.getOrPutEdge(cb, cc);
             const e3 = this.getOrPutEdge(cc, ca);
 
-            const face = new IndexedTri([a, b, c], [e1, e2, e3]); // store raw indices
-            this.faces.push(face);
+            const tri = new IndexedTri(i / 3, [a, b, c], [e1, e2, e3]); // store raw indices
+            this.tris.push(tri);
+        }
+        return this;
+    }
+
+    public createCanonicalVertexMap() {
+        const position = this.geometry.attributes.position;
+        const map = new Map<string, number>();       // pos key → canonical index
+        for (let i = 0; i < position.count; i++) {
+            const key = `${position.getX(i).toFixed(5)}_${position.getY(i).toFixed(5)}_${position.getZ(i).toFixed(5)}`;
+            if (!map.has(key)) {
+                map.set(key, i);
+            }
+            this.canonical.set(i, map.get(key)!);
         }
     }
 
     public indexedTriAt(index: number): IndexedTri {
-        return this.faces[index];
+        return this.tris[index];
     }
 
     public triAt(index: number): Triangle {
-        return this.faces[index].getTriOn(this.geometry);
+        return this.tris[index].on(this.geometry);
     }
 
-    public getPlaneAt(index: number): Plane {
+    public geometryAt(index: number): IndexedBufferGeometry {
+        return this.tris[index].geometryOn(this.geometry);
+    }
+
+    public planeAt(index: number): Plane {
         const tri = this.triAt(index);
         return new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
     }
+
 
     private getOrPutEdge(a: number, b: number): IndexedEdge {
         const key = IndexedEdge.key(a, b);
@@ -173,31 +236,34 @@ class EdgeGraph extends Map<string, IndexedEdge> {
 }
 
 class BenchTriangle extends Triangle {
-    public readonly uva: Vector2;
-    public readonly uvb: Vector2;
-    public readonly uvc: Vector2;
+    public readonly uv: TriUV;
     public readonly matIndex: number;
-    constructor(geometry: BufferGeometry, face: Face) {
+    constructor(geometry: BufferGeometry, tri: IndexedTri) {
         super();
         const pos = geometry.attributes.position;
         const uv = geometry.attributes.uv as BufferAttribute;
-        super.setFromAttributeAndIndices(pos, face.a, face.b, face.c);
-        this.uva = new Vector2().fromBufferAttribute(uv, face.a);
-        this.uvb = new Vector2().fromBufferAttribute(uv, face.b);
-        this.uvc = new Vector2().fromBufferAttribute(uv, face.c);
-        this.matIndex = face.materialIndex;
+        super.setFromAttributeAndIndices(pos, tri.a, tri.b, tri.c);
+        this.uv = [
+            new Vector2().fromBufferAttribute(uv, tri.a),
+            new Vector2().fromBufferAttribute(uv, tri.b),
+            new Vector2().fromBufferAttribute(uv, tri.c)
+        ];
+        this.matIndex = BenchTriangle.getMaterialIndex(geometry, tri.index)!;
     }
     
-    public static getFaceMaterialIndices(geometry: BufferGeometry): number[] {
-        const result: number[] = [];
+    public static getMaterialIndex(geometry: BufferGeometry, faceIndex: number): number | undefined {
+        const triangleStartIndex = faceIndex * 3;
+
         for (const group of geometry.groups) {
-            const faceStart = group.start / 3;
-            const faceCount = group.count / 3;
-            for (let i = 0; i < faceCount; i++) {
-                result[faceStart + i] = group.materialIndex!;
+            const groupStart = group.start;
+            const groupEnd = group.start + group.count;
+
+            if (triangleStartIndex >= groupStart && triangleStartIndex < groupEnd) {
+                return group.materialIndex;
             }
         }
-        return result;
+
+        return undefined; // if no group matched
     }
 
     public createGeometry() {
@@ -207,14 +273,14 @@ class BenchTriangle extends Triangle {
         return geometry;
     }
 
-    public static of(geometry: BufferGeometry, face: Face) {
-        return new BenchTriangle(geometry, face);
+    public static of(geometry: BufferGeometry, triIndex: number) {
+        return new BenchTriangle(geometry, IndexedTri.at(geometry.index!, triIndex));
     }
 }
 
 class GeometryUtil {
 
-    public static combineGeometries(loadedObj: Group): BufferGeometry | null {
+    public static combineGroupGeometries(loadedObj: Group): BufferGeometry | null {
         const geometries: BufferGeometry[] = [];
 
         loadedObj.traverse((child) => {
@@ -230,84 +296,63 @@ class GeometryUtil {
         return mergedGeometry;
     }
 
-    public static createCanonicalVertexMap(geometry: BufferGeometry): Map<number, number> {
-        const position = geometry.attributes.position;
-        const map = new Map<string, number>();       // pos key → canonical index
-        const canonical = new Map<number, number>(); // raw index → canonical index
-
-        for (let i = 0; i < position.count; i++) {
-            const key = `${position.getX(i).toFixed(5)}_${position.getY(i).toFixed(5)}_${position.getZ(i).toFixed(5)}`;
-            if (!map.has(key)) {
-                map.set(key, i);
-            }
-            canonical.set(i, map.get(key)!);
-        }
-
-        return canonical;
+    public static mergeIndexedGeometries(geometries: IndexedBufferGeometry[]): IndexedBufferGeometry {
+        const merged = mergeBufferGeometries(geometries, true);
+        if (!merged) throw new Error("Merge failed");
+        return merged as IndexedBufferGeometry;
     }
 
-    public static createIndexedGeometry(geometry: BufferGeometry): BufferGeometry {
-        return mergeVertices(geometry);
+    public static createTriangleGeometry(tri: Triangle): IndexedBufferGeometry {
+        const geometry = new BufferGeometry();
+        geometry.setFromPoints([tri.a, tri.b, tri.c]);
+        geometry.setIndex([0, 1, 2]);
+        geometry.computeVertexNormals();
+        return geometry as IndexedBufferGeometry;
+    }
+
+    public static createIndexedGeometry(geometry: BufferGeometry): IndexedBufferGeometry {
+        return mergeVertices(geometry) as IndexedBufferGeometry;
     }
 
     public static createWireframe(geometry: BufferGeometry): WireframeGeometry {
         return new WireframeGeometry(geometry);
     }
 
-    public static createEdgeGraph(geometry: BufferGeometry): EdgeGraph  {
-        if (!geometry.index) throw new Error("Geometry must be indexed");
-        return new EdgeGraph(geometry);
-    }
+    public static createCoplanar(edgeGraph: EdgeGraph, baseIndex: number) {
 
-    public static createCoplanar(geometry: BufferGeometry, faceIndex: number) {
-        if (!geometry.index) throw new Error("Geometry must be indexed");
-        const position = geometry.attributes.position as BufferAttribute;
-
-        const edgeGraph: EdgeGraph = geometry.userData.edgeGraph ?? GeometryUtil.createEdgeGraph(geometry);
-
-        const baseIndexedTri = edgeGraph.indexedTriAt(faceIndex);
-        const basePlane = edgeGraph.getPlaneAt(faceIndex);
-
-        const visited = new Set<IndexedTri>();
-        const toVisit = [baseIndexedTri];
-        const resultIndices: number[] = [];
+        const basePlane = edgeGraph.planeAt(baseIndex);
+        const visited = new Set<number>();
+        const toVisit = [baseIndex];
+        const result = new IndexedGeometry();
 
         while (toVisit.length > 0) {
-            const curIndexedTri = toVisit.pop()!;
-            if (visited.has(curIndexedTri)) continue;
-            visited.add(curIndexedTri);
+            const curIndex = toVisit.pop()!;
+            if (visited.has(curIndex)) continue;
+            visited.add(curIndex);
 
-            const tri = curIndexedTri.getTriOn(geometry);
-            const coplanar = GeometryUtil.isCoplanar(tri, basePlane);
+            const curTri = edgeGraph.triAt(curIndex)
+            const coplanar = GeometryUtil.isCoplanar(curTri, basePlane);
             
             if (!coplanar) continue;
 
             // Add original triangle indices
-            resultIndices.push(
-                curIndexedTri.a,
-                curIndexedTri.b,
-                curIndexedTri.c
-            );
+            result.add(curIndex);
 
-            for (const edge of curIndexedTri.edges) {
-                const neighbors = edge.faces;
+            for (const edge of edgeGraph.indexedTriAt(curIndex).edges) {
+                const neighbors = edge.tris;
                 for (const neighbor of neighbors) {
-                    
-                    if (!visited.has(neighbor)) {
-                        toVisit.push(neighbor);
+                    if (!visited.has(neighbor.index)) {
+                        toVisit.push(neighbor.index);
                     }
                 }
             }
         }
-        const output = new BufferGeometry();
-        if (resultIndices.length === 0) return output;
-        output.setIndex(resultIndices);
-        output.setAttribute("position", position.clone());
-        output.computeVertexNormals();
+
+        const output = result.on(edgeGraph);
         return output;
     }
 
-    public static isCoplanar(tri: Triangle, basePlane: Plane, COPLANAR_TOLERANCE = 0.02, NORMAL_TOLERANCE = 0.5) {
+    public static isCoplanar(tri: Triangle, basePlane: Plane, COPLANAR_TOLERANCE = 0.02, NORMAL_TOLERANCE = 0.2) {
         const plane = new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
         const aligned = plane.normal.angleTo(basePlane.normal) < NORMAL_TOLERANCE;
         if (!aligned) return false;
@@ -318,7 +363,7 @@ class GeometryUtil {
         return coplanar;
     }
 
-    public static async run<T = any>(fn: GeometryFunctionName, ...payload: any[]): Promise<T> {
+    public static async run<T = any>(fn: GeometryRunnableFunctions, ...payload: any[]): Promise<T> {
         const worker = new GeometryWorker();
         return new Promise((resolve, reject) => {
             worker.onmessage = (e) => {
@@ -433,17 +478,21 @@ class GeometryUtil {
         payload.forEach((value, index) => {
             payload[index] = GeometryUtil.serializeAsType(value)
         });
-    }
+    } 
+}
+
+function assertIndexedGeometry(geom: BufferGeometry): asserts geom is IndexedBufferGeometry {
+    if (!geom.index) throw new Error("Geometry must be indexed.");
 }
 
 
-
-
 export type {
-    GeometryFunctionName
+    GeometryRunnableFunctions,
+    IndexedBufferGeometry
 }
 
 export {
     GeometryUtil,
-    BenchTriangle
+    BenchTriangle,
+    EdgeGraph
 }

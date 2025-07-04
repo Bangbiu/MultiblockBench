@@ -12,13 +12,13 @@ import {
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
-import { GeometryUtil } from '../util/GeometryUtil';
+import { EdgeGraph, GeometryUtil, type IndexedBufferGeometry } from '../util/GeometryUtil';
 import { Selection } from '../gui/Selection';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
 
 type BenchIntersection = {
-    mesh: BenchMesh,
+    benchMesh: BenchMesh,
     isect: Intersection,
     dist: number
 }
@@ -70,8 +70,8 @@ class BenchModel extends Group {
         .then("Index Geometry", 
             this.indexGeometries.bind(this))
         .then("Create Edge Graph",    
-            this.createEdgeGraph.bind(this))
-        .finally("Wireframe",
+            this.createEdgeGraphs.bind(this))
+        .finally("Create Wireframe",
             this.createWireframes.bind(this))
         .work();
     }
@@ -121,7 +121,7 @@ class BenchModel extends Group {
         await this.runOnAll(mesh => mesh.toIndexed(), eventHandler);
     }
 
-    public async createEdgeGraph(eventHandler?: SubTaskHandler) {
+    public async createEdgeGraphs(eventHandler?: SubTaskHandler) {
         await this.runOnAll(mesh => mesh.createEdgeGraph(), eventHandler);
     }
 
@@ -147,7 +147,7 @@ class BenchModel extends Group {
         }
         if (minIsect && isectedMesh ) {
             return {
-                mesh: isectedMesh,
+                benchMesh: isectedMesh,
                 isect: minIsect,
                 dist: minDist
             }
@@ -161,6 +161,7 @@ class BenchModel extends Group {
 class BenchMesh extends Group {
     private readonly mesh: Mesh;
     private readonly wireframe: LineSegments;
+    public readonly edgeGraph: EdgeGraph;
 
     constructor(loadedMesh: Mesh) {
         super();
@@ -178,21 +179,19 @@ class BenchMesh extends Group {
         // Set render order to draw on top
         this.wireframe.renderOrder = 1;
         this.add(this.wireframe);
+
+        // Edge Graph
+        this.edgeGraph = new EdgeGraph();
     }
 
     public async toIndexed() {
         const geometry = this.mesh.geometry;
         if (geometry.index) return;
         this.mesh.geometry = await GeometryUtil.run("createIndexedGeometry", geometry);
-        console.log(this.mesh.geometry.index?.array.length);
-        console.log(this.mesh.geometry.attributes.position.array.length);
-        
     }
 
     public async createEdgeGraph() {
-        const geometry = this.mesh.geometry;
-        if (geometry.userData.edgeGraph) return;
-        geometry.userData.edgeGraph = await GeometryUtil.createEdgeGraph(geometry);
+        await this.edgeGraph.create(this.mesh.geometry as IndexedBufferGeometry);
     }
 
     public async createWireframe() {
@@ -213,6 +212,10 @@ class BenchMesh extends Group {
             return isects[0];
         else 
             return undefined;
+    }
+
+    public geometryAt(index: number) {
+        return this.edgeGraph.geometryAt(index);
     }
 }
 
