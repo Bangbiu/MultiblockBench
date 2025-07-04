@@ -12,8 +12,9 @@ import {
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
-import { EdgeGraph, GeometryUtil, type IndexedBufferGeometry } from '../util/GeometryUtil';
+import { GeometryUtil, type IndexedBufferGeometry } from '../util/GeometryUtil';
 import { Selection } from '../gui/Selection';
+import { BenchGeometry } from '../geometry/BenchGeometry';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
 
@@ -69,8 +70,8 @@ class BenchModel extends Group {
             handler => this.fromObjFile(fileList, handler))
         .then("Index Geometry", 
             this.indexGeometries.bind(this))
-        .then("Create Edge Graph",    
-            this.createEdgeGraphs.bind(this))
+        .then("Create Bench Geometry", 
+            this.createBenchGeometry.bind(this))
         .finally("Create Wireframe",
             this.createWireframes.bind(this))
         .work();
@@ -121,12 +122,12 @@ class BenchModel extends Group {
         await this.runOnAll(mesh => mesh.toIndexed(), eventHandler);
     }
 
-    public async createEdgeGraphs(eventHandler?: SubTaskHandler) {
-        await this.runOnAll(mesh => mesh.createEdgeGraph(), eventHandler);
-    }
-
     public async createWireframes(eventHandler?: SubTaskHandler) {
         await this.runOnAll(mesh => mesh.createWireframe(), eventHandler);
+    }
+
+    public async createBenchGeometry(eventHandler?: SubTaskHandler) {
+        await this.runOnAll(mesh => mesh.createGeometry(), eventHandler)
     }
 
     protected getClosestIntersection(raycaster: Raycaster): Opt<BenchIntersection> {
@@ -161,7 +162,7 @@ class BenchModel extends Group {
 class BenchMesh extends Group {
     private readonly mesh: Mesh;
     private readonly wireframe: LineSegments;
-    public readonly edgeGraph: EdgeGraph;
+    public readonly geometry: BenchGeometry;
 
     constructor(loadedMesh: Mesh) {
         super();
@@ -175,13 +176,12 @@ class BenchMesh extends Group {
         this.wireframe.material = new LineBasicMaterial({
             color: config.wireframeColor,
             linewidth: config.wireframeLineWidth
-        })
+        });
         // Set render order to draw on top
         this.wireframe.renderOrder = 1;
         this.add(this.wireframe);
-
-        // Edge Graph
-        this.edgeGraph = new EdgeGraph();
+        // BenchGeometry
+        this.geometry = new BenchGeometry();
     }
 
     public async toIndexed() {
@@ -190,8 +190,8 @@ class BenchMesh extends Group {
         this.mesh.geometry = await GeometryUtil.run("createIndexedGeometry", geometry);
     }
 
-    public async createEdgeGraph() {
-        await this.edgeGraph.create(this.mesh.geometry as IndexedBufferGeometry);
+    public async createGeometry() {
+        await this.geometry.create(this.mesh.geometry as IndexedBufferGeometry);
     }
 
     public async createWireframe() {
@@ -214,8 +214,12 @@ class BenchMesh extends Group {
             return undefined;
     }
 
-    public geometryAt(index: number) {
-        return this.edgeGraph.geometryAt(index);
+    public faceGeometryAt(index: number) {
+        return this.geometry.faceGeometryAt(index);
+    }
+
+    public static load(mesh: Mesh) {
+        
     }
 }
 
