@@ -40,6 +40,8 @@ class BenchRenderer extends WebGLRenderer {
 
     updateSize(): void {
         this.setSize(window.innerWidth, window.innerHeight);
+        const ratio = Math.min(window.devicePixelRatio, 1.5); // cap it
+        this.setPixelRatio(ratio);
     }
 }
 

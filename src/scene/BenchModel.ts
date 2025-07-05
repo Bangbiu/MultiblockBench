@@ -12,15 +12,17 @@ import {
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
-import { GeometryUtil, type IndexedBufferGeometry } from '../util/GeometryUtil';
+import { GeometryUtil, type GeometryIndexedMesh, type IndexedBufferGeometry } from '../util/GeometryUtil';
 import { Selection } from '../gui/Selection';
-import { BenchGeometry } from '../geometry/BenchGeometry';
+import { BenchGeometry, BenchSubGeometry } from '../util/BenchGeometry';
+import type { BenchExtraction } from './BenchOutput';
+import { MaterialUtil } from '../util/MaterialUtil';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
 
 type BenchIntersection = {
     benchMesh: BenchMesh,
-    isect: Intersection,
+    faceIndex: number,
     dist: number
 }
 
@@ -28,6 +30,7 @@ class BenchModel extends Group {
     public selection?: Selection;
     public benchMeshes: Set<BenchMesh>;
     private _showWireframe: boolean = true;
+    private _hideMeshes: boolean = false;
 
     constructor() {
         super();
@@ -35,13 +38,18 @@ class BenchModel extends Group {
         this.scale.copy(BenchModel.BENCH_SCALE);
     }
 
-    public get showWireframe() {
-        return this._showWireframe;
-    }
+    public get showWireframe() { return this._showWireframe; }
 
     public set showWireframe(value: boolean) {
         this._showWireframe = value;
         this.benchMeshes.forEach(mesh => mesh.showWireframe(value));
+    }
+
+    public get hideMeshes() { return this._hideMeshes; }
+
+    public set hideMeshes(value: boolean) {
+        this._hideMeshes = value;
+        this.benchMeshes.forEach(mesh => mesh.visible = !value);
     }
 
     public add(...objs: Array<Object3D>): this {
@@ -149,25 +157,34 @@ class BenchModel extends Group {
         if (minIsect && isectedMesh ) {
             return {
                 benchMesh: isectedMesh,
-                isect: minIsect,
+                faceIndex: minIsect.faceIndex!,
                 dist: minDist
             }
         }
         return undefined;
     }
 
+    public setOpacity(opacity: number) {
+        this.benchMeshes.forEach(mesh => mesh.setOpacity(opacity));
+    }
+
+    public extractSelected(): Opt<Mesh> {
+        if (!this.selection) return undefined;
+        return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
+    }
+
     public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
 }
 
 class BenchMesh extends Group {
-    private readonly mesh: Mesh;
     private readonly wireframe: LineSegments;
+    private readonly mesh: GeometryIndexedMesh;
     public readonly geometry: BenchGeometry;
 
     constructor(loadedMesh: Mesh) {
         super();
         const config = window.config.model;
-        this.mesh = loadedMesh;
+        this.mesh = loadedMesh as GeometryIndexedMesh;
         this.name = loadedMesh.name;
         this.add(this.mesh);
 
@@ -187,7 +204,7 @@ class BenchMesh extends Group {
     public async toIndexed() {
         const geometry = this.mesh.geometry;
         if (geometry.index) return;
-        this.mesh.geometry = await GeometryUtil.run("createIndexedGeometry", geometry);
+        this.mesh.geometry = await GeometryUtil.run<IndexedBufferGeometry>("createIndexedGeometry", geometry);
     }
 
     public async createGeometry() {
@@ -206,6 +223,14 @@ class BenchMesh extends Group {
         return state;
     }
 
+    public setOpacity(opacity: number) {
+        MaterialUtil.setMaterialOpacity(this.mesh.material, opacity);
+    }
+
+    public extractSubMesh(subGeom: BenchSubGeometry): Mesh {
+        return GeometryUtil.extractSubMesh(this.mesh, subGeom);
+    }
+
     public getIntersection(raycaster: Raycaster): Intersection | undefined {
         const isects = raycaster.intersectObject(this.mesh, false);
         if (isects.length > 0) 
@@ -216,10 +241,6 @@ class BenchMesh extends Group {
 
     public faceGeometryAt(index: number) {
         return this.geometry.faceGeometryAt(index);
-    }
-
-    public static load(mesh: Mesh) {
-        
     }
 }
 

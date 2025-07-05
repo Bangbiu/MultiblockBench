@@ -12,7 +12,7 @@ import {
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import { BenchFace, BenchSubGeometry, type BenchGeometry } from "../geometry/BenchGeometry";
+import { BenchFace, BenchSubGeometry, type BenchGeometry } from "./BenchGeometry";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 type RunnableFuncKeys<T> = {
@@ -35,7 +35,9 @@ type SerializedAttribute = {
 };
 
 type TriUV = [Vector2, Vector2, Vector2];
+type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
 type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
+
 
 class BenchTriangle extends Triangle {
     public readonly uv: TriUV;
@@ -136,14 +138,14 @@ class GeometryUtil {
         return newGeo as IndexedBufferGeometry;
     }
 
-    public static createCanonicalIndexArray(geometry: IndexedBufferGeometry): Array<number> {
+    public static createCanonicalIndexArray(geometry: IndexedBufferGeometry, outputArray?: Array<number>): Array<number> {
         const position = geometry.attributes.position as BufferAttribute;
         const indices = geometry.index;
         const canonicalIndexMap = new Map<string, number>(); // key → canonical index
         //const canonicalPositions: Vector3[] = [];
 
         let canonicalCounter = 0;
-        const uniqueIndices = new Array();
+        const result = outputArray ?? new Array();
         for (let i = 0; i < indices.count; i++) {
             const posIndex = indices.getX(i);
             const pos = new Vector3().fromBufferAttribute(position, posIndex);
@@ -155,9 +157,9 @@ class GeometryUtil {
                 canonicalIndexMap.set(key, canonicalIdx);
             }
 
-            uniqueIndices.push(canonicalIdx);
+            result.push(canonicalIdx);
         }
-        return uniqueIndices;
+        return result;
     }
 
     public static mergeIndexedGeometries(geometries: IndexedBufferGeometry[]): IndexedBufferGeometry {
@@ -182,11 +184,11 @@ class GeometryUtil {
         return new WireframeGeometry(geometry);
     }
 
-    public static createCoplanar(benchGeom: BenchGeometry, baseIndex: number): IndexedBufferGeometry {
+    public static createCoplanar(benchGeom: BenchGeometry, baseIndex: number): BenchSubGeometry {
         const basePlane = benchGeom.planeAt(baseIndex);
         const visited = new Set<number>();
         const toVisit = [baseIndex];
-        const result = new BenchSubGeometry();
+        const result: Set<number> = new Set();
 
         while (toVisit.length > 0) {
             const curIndex = toVisit.pop()!;
@@ -202,13 +204,13 @@ class GeometryUtil {
             result.add(curIndex);
 
             for (const neighborIndex of benchGeom.neighborsOf(curIndex)) {
-                if (!visited.has(neighborIndex)) {
-                    toVisit.push(neighborIndex);
-                }
+                if (neighborIndex === undefined) continue;
+                if (visited.has(neighborIndex)) continue;
+                toVisit.push(neighborIndex);
             }
         }
         
-        return result.on(benchGeom);
+        return benchGeom.subGeometry(result);
     }
 
     public static isCoplanar(tri: Triangle, basePlane: Plane, COPLANAR_TOLERANCE = 0.02, NORMAL_TOLERANCE = 0.2) {
@@ -220,6 +222,63 @@ class GeometryUtil {
                 Math.abs(basePlane.distanceToPoint(tri.b)) < COPLANAR_TOLERANCE &&
                 Math.abs(basePlane.distanceToPoint(tri.c)) < COPLANAR_TOLERANCE;
         return coplanar;
+    }
+
+    public static extractSubMesh(srcMesh: GeometryIndexedMesh, subGeometry: BenchSubGeometry): Mesh {
+        const srcGeo = srcMesh.geometry;
+        
+        const attributes = srcGeo.attributes;
+        const usedVertexMap = new Map<number, number>(); // oldIndex -> newIndex
+        const newIndices: number[] = [];
+
+        let newVertexCounter = 0;
+
+        for (const face of subGeometry.faces()) {
+            const [a, b, c] = face.verts;
+
+            for (const vi of [a, b, c]) {
+                if (!usedVertexMap.has(vi)) {
+                    usedVertexMap.set(vi, newVertexCounter++);
+                }
+            }
+
+            newIndices.push(
+                usedVertexMap.get(a)!,
+                usedVertexMap.get(b)!,
+                usedVertexMap.get(c)!
+            );
+        }
+
+        // Create reverse map: newIndex -> oldIndex
+        const reverseMap = new Map<number, number>();
+        for (const [oldIndex, newIndex] of usedVertexMap.entries()) {
+            reverseMap.set(newIndex, oldIndex);
+        }
+
+        const newGeo = new BufferGeometry();
+
+        for (const [name, attr] of Object.entries(attributes)) {
+            const itemSize = attr.itemSize;
+            const TypedArrayConstructor = attr.array.constructor as any;
+            const array = new TypedArrayConstructor(usedVertexMap.size * itemSize);
+
+            for (let newIndex = 0; newIndex < usedVertexMap.size; newIndex++) {
+                const oldIndex = reverseMap.get(newIndex)!;
+                for (let k = 0; k < itemSize; k++) {
+                    array[newIndex * itemSize + k] = attr.array[oldIndex * itemSize + k];
+                }
+            }
+
+            newGeo.setAttribute(name, new BufferAttribute(array, itemSize, attr.normalized));
+        }
+
+        // Build new index buffer
+        const IndexArrayConstructor = (srcGeo.index.array.constructor as any);
+        const newIndexBuffer = new IndexArrayConstructor(newIndices);
+        newGeo.setIndex(new BufferAttribute(newIndexBuffer, 1));
+
+        const subMesh = new Mesh(newGeo, srcMesh.material);
+        return subMesh;
     }
 
     public static async run<T = any>(fn: GeometryRunnableFunctions, ...payload: any[]): Promise<T> {
@@ -350,7 +409,8 @@ function vertKey(v: Vector3) {
 
 export type {
     GeometryRunnableFunctions,
-    IndexedBufferGeometry
+    IndexedBufferGeometry,
+    GeometryIndexedMesh
 }
 
 export {

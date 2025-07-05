@@ -4,8 +4,9 @@ import {
     Mesh, 
     MeshBasicMaterial,  
 } from "three";
-import { GeometryUtil } from "../util/GeometryUtil";
+import { GeometryUtil, type IndexedBufferGeometry } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
+import type { BenchSubGeometry } from "../util/BenchGeometry";
 
 
 class Selection extends Group {
@@ -25,7 +26,7 @@ class Selection extends Group {
 }
 
 class SelectedFace extends Mesh {
-    constructor(intersection: BenchIntersection) {
+    constructor(isect: BenchIntersection) {
         super();
         const [ color, opacity ] = window.config.selection.faceColor;
         this.material = new MeshBasicMaterial({
@@ -34,8 +35,7 @@ class SelectedFace extends Mesh {
                 transparent: true,
                 opacity: opacity
             });
-        const isect = intersection.isect;
-        const benchMesh = intersection.benchMesh;
+        const benchMesh = isect.benchMesh;
         if (isect.faceIndex) {
             // Create triangle geometry
             this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
@@ -46,7 +46,8 @@ class SelectedFace extends Mesh {
 }
 
 class SelectedPlane extends Mesh  {
-    constructor(intersection: BenchIntersection) {
+    public subGeom: BenchSubGeometry;
+    constructor(isect: BenchIntersection) {
         const [ color, opacity ] = window.config.selection.coplaneColor;
         super();
         this.material = new MeshBasicMaterial({
@@ -55,14 +56,13 @@ class SelectedPlane extends Mesh  {
                 transparent: true,
                 opacity: opacity
             });
-        const isect = intersection.isect;
-        if (!isect.faceIndex) return;
-        const srcMesh = isect.object as Mesh;
-        if (!srcMesh.isMesh) return;
-        this.geometry = GeometryUtil.createCoplanar(intersection.benchMesh.geometry, isect.faceIndex);
+        const benchMesh = isect.benchMesh;
+        this.subGeom = GeometryUtil.createCoplanar(benchMesh.geometry, isect.faceIndex!);
+        this.geometry = this.subGeom.bareGeom;
         //this.geometry = GeometryUtil.canonicalize(srcMesh.geometry as IndexedBufferGeometry);
         this.visible = true;
     }
+
 }
 
 export {
