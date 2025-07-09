@@ -1,55 +1,100 @@
-import { BufferAttribute, BufferGeometry, Plane, Triangle, Vector3 } from "three";
-import { GeometryUtil, type IndexedBufferGeometry } from "./GeometryUtil";
+import {
+  BufferAttribute,
+  Plane,
+  Triangle,
+  Vector3,
+  type TypedArray
+} from 'three';
+import { GeometryUtil, type IndexedBufferGeometry } from './GeometryUtil';
 
-type Truple = [number, number, number];
 type Duple = [number, number];
-type Quadruple = [number, number, number, number];
-type Sextuple = [number, number, number, number, number, number];
-type SerializedBenchGeometry = {
-    faces: Array<Sextuple>;
-    edges: Array<Quadruple>;
-    unidex: Array<number>;
+type Truple = [number, number, number];
+type EdgeTuple = [number, number, number, number]; // [v1, v2, f1, f2]
+
+/**
+ * Bench Vertex
+ * 
+ * Created from BenchGeometry By 
+ * 
+ * Starting Index and Data Length in vertEdges and vertFaces Index Pool
+ * 
+ * Able to create related Bench Edge and BenchFace Instance
+ * 
+ */
+class BenchVertex {
+    public readonly parent: BenchGeometry;
+    public readonly index: number;
+    public readonly edges: TypedArray;
+    constructor(parent: BenchGeometry, index: number) {
+        this.parent = parent;
+        this.index = index;
+        const head = parent.vertMetaAttr.getX(index);
+        const rear = head + parent.vertMetaAttr.getY(index);
+        this.edges = this.parent.vertEdgesPool
+        .subarray(head, rear);
+    }
+
+    public static keyOf(v: Vector3) {
+        return BenchVertex.key(v.x, v.y, v.z);
+    }
+
+    public static key(x: number, y: number, z: number) {
+        return `${x.toFixed(5)}_${y.toFixed(5)}_${z.toFixed(5)}`;
+    }
+
+    public static readonly META_SIZE = 2;
 }
+
+/**
+ * Bench Edge
+ * 
+ * Created from BenchGeometry By 
+ * 
+ * Elements from Starting Index to Starting Index + 4
+ * Described by
+ * [ vertIndex1(a), vertIndex2(b),
+ *   faceIndex1(v1), faceIndex2(v2) ]
+ * 
+ */
 
 class BenchEdge {
     public readonly index: number;
-    public readonly verts: Duple;
-    public readonly faces: Duple;
+    public readonly data: TypedArray;
     
-    constructor(index: number, v1: number, v2: number, f1?: number, f2?: number) {
+    constructor(parent: BenchGeometry, index: number) {
         this.index = index;
-        this.verts = [Math.min(v1, v2), Math.max(v1, v2)];
-        this.faces = new Array(2) as Duple;
-        if (f1) this.f1 = f1;
-        if (f2) this.f2 = f2;
+        const itemSize = parent.edgeAttr.itemSize;
+        const offset = index * itemSize;
+        this.data = parent.edgeAttr.array.subarray(offset, offset + itemSize)
     }
 
-    public get v1(): number { return this.verts[0]; }
-    public get v2(): number { return this.verts[1]; }
+    public get a(): number { return this.data[0]; }
+    public get b(): number { return this.data[1]; }
 
-    public get f1(): number { return this.faces[0]; }
-    public get f2(): number { return this.faces[1]; }
-    public set f1(faceIndex: number) { this.faces[0] = faceIndex; }
-    public set f2(faceIndex: number) { this.faces[1] = faceIndex; }
+    public get f1(): number { return this.data[2]; }
+    public get f2(): number { return this.data[3]; }
+    public set f1(faceIndex: number) { this.data[2] = faceIndex; }
+    public set f2(faceIndex: number) { this.data[3] = faceIndex; }
 
-    public get isManifold() { return this.f1 && this.f2; }
+    public get isManifold(): boolean {
+        return this.f1 !== -1 && this.f2 !== -1;
+    }
 
-    public putFace(faceIndex: number): boolean {
-        if (this.f1 && this.f2) return false;
-        if (this.f2) this.f1 = faceIndex;
-        else this.f2 = faceIndex;
+    public attachFace(faceIndex: number): boolean {
+        if (this.f1 === -1) this.f1 = faceIndex;
+        else if (this.f2 === -1) this.f2 = faceIndex;
+        else return false;
         return true;
     }
 
-    public otherFaceOf(faceIndex: number): number {
-        if (this.f1 === faceIndex) 
-            return this.f2;
-        else
-            return this.f1;
+    public otherFaceOf(faceIndex: number): Opt<number> {
+        if (this.f1 !== faceIndex) return this.f1;
+        else if (this.f2 !== faceIndex) return this.f2;
+        else return undefined;
     }
     
     public equals(other: BenchEdge) {
-        return other.v1 == this.v1 && other.v2 == this.v2;
+        return other.a == this.a && other.b == this.b;
     }
 
     /** Normalized key, for hashing */
@@ -58,42 +103,65 @@ class BenchEdge {
     }
 
     get key(): string {
-        return BenchEdge.key(this.v1, this.v2);
+        return BenchEdge.key(this.a, this.b);
     }
 
-    public serialize(): Quadruple {
-        return [...this.verts, ...this.faces];
-    }
-
-    public static serialize(bf: BenchEdge): Quadruple {
-        return [...bf.verts, ...bf.faces];
-    }
-
-    public static deserialize(index: number, data: Quadruple) {
-        return new BenchEdge(
-            index,
-            data[0],data[1], 
-            data[2],data[3]
-        );
-    }
+    public static readonly DATA_SIZE = 4;
 }
+
+
+/**
+ * Bench Face
+ * 
+ * Created from BenchGeometry By 
+ * 
+ * Elements from Starting Index to Starting Index + 9
+ * Described by
+ * [
+ *  vertIndex1(a), vertIndex2(b), vertIndex3(c)
+ *  edgeIndex1(e1), edgeIndex2(e2), edgeIndex3(e3)
+ *  uniqueVert1(v1), uniqueVert2(v2), uniqueVert3(v3)
+ * ]
+ * 
+ */
 
 class BenchFace {
     public readonly index: number;
-    public readonly verts: Truple;
-    public readonly edges: Truple;
-    constructor(index: number, verts: Truple, edges: Truple) {
+    public readonly data: TypedArray;
+
+    constructor(parent: BenchGeometry, index: number) {
         this.index = index;
-        this.verts = verts;
-        this.edges = edges;
+        const itemSize = parent.faceAttr.itemSize;
+        const offset = index * itemSize;
+        this.data = parent.faceAttr.array.subarray(offset, offset + itemSize);
     }
 
-    public get a(): number { return this.verts[0]; }
-    public get b(): number { return this.verts[1]; }
-    public get c(): number { return this.verts[2]; }
+    public get a(): number { return this.data[0]; }
+    public get b(): number { return this.data[1]; }
+    public get c(): number { return this.data[2]; }
 
-    public get array(): Truple {
-        return this.verts;
+    public get e1(): number { return this.data[3]; }
+    public get e2(): number { return this.data[4]; }
+    public get e3(): number { return this.data[5]; }
+
+    public get v1(): number { return this.data[6]; }
+    public get v2(): number { return this.data[7]; }
+    public get v3(): number { return this.data[8]; }
+
+    public get indices(): TypedArray { return this.data.subarray(0, 3); }
+    public get edges(): TypedArray { return this.data.subarray(3, 6); }
+    public get verts(): TypedArray { return this.data.subarray(6, 9); }
+
+    public set indices(truple: Truple) { 
+        for (let i = 0; i < 3; i++) this.data[i] = truple[i];
+    }
+
+    public set edges(truple: Truple) { 
+        for (let i = 0; i < 3; i++) this.data[i + 3] = truple[i];
+    }
+
+    public set verts(truple: Truple) { 
+        for (let i = 0; i < 3; i++) this.data[i + 6] = truple[i];
     }
 
     public on(geometry: IndexedBufferGeometry): Triangle {
@@ -108,165 +176,10 @@ class BenchFace {
         return GeometryUtil.createTriangleGeometry(this.on(geometry));
     }
 
-    public serialize(): Sextuple {
-        return [...this.verts, ...this.edges];
-    }
-
-    public static serialize(bf: BenchFace): Sextuple {
-        return [...bf.verts, ...bf.edges];
-    }
-
-    public static deserialize(index: number, data: Sextuple) {
-        return new BenchFace(
-            index, 
-            [data[0], data[1], data[2]], 
-            [data[3], data[4], data[5]]
-        );
-    }
+    public static readonly DATA_SIZE = 9;
 }
 
 
-class BenchGeometry {
-    public readonly faces: Array<BenchFace>;
-    public readonly edges: Array<BenchEdge>;
-    public readonly unidex: Array<number>;
-    public src?: IndexedBufferGeometry;
-
-    constructor() {
-        this.faces = new Array();
-        this.edges = new Array();
-        this.unidex = new Array();
-    }
-
-    public create(geometry: IndexedBufferGeometry): this {
-        //this.canonic = GeometryUtil.canonicalize(geometry);
-        this.src = geometry;
-        this.faces.length = 0;
-        this.edges.length = 0;
-        this.unidex.length = 0;
-        GeometryUtil.createCanonicalIndexArray(geometry, this.unidex);
-        const indices = geometry.index;
-        const edgeMap = new Map<string, BenchEdge>();
-        for (let i = 0; i < indices.count; i += 3) {
-            const a = indices.getX(i);
-            const b = indices.getX(i + 1);
-            const c = indices.getX(i + 2);
-
-            // Use canonical position index for edge graph
-            const ca = this.unidex[i];
-            const cb = this.unidex[i + 1];
-            const cc = this.unidex[i + 2];
-
-            const e1 = this.getUniqueEdge(ca, cb, edgeMap);
-            const e2 = this.getUniqueEdge(cb, cc, edgeMap);
-            const e3 = this.getUniqueEdge(cc, ca, edgeMap);
-
-            const faceIndex = i / 3
-            const face = new BenchFace(faceIndex, [a, b, c], [e1, e2, e3]); // store raw indices
-            
-            this.edges[e1].putFace(faceIndex);
-            this.edges[e2].putFace(faceIndex);
-            this.edges[e3].putFace(faceIndex);
-            
-            this.faces.push(face);
-        }
-        return this;
-    }
-
-    public edgeAt(index: number): BenchEdge {
-        return this.edges[index];
-    }
-
-    public faceAt(index: number): BenchFace {
-        return this.faces[index];
-    }
-
-    public faceGeometryAt(index: number): IndexedBufferGeometry {
-        this.assertSourceGeometry();
-        return this.faces[index].geometryOn(this.src);
-    }
-
-    public triAt(index: number): Triangle {
-        this.assertSourceGeometry();
-        if (!this.faces[index])
-            console.log(index + " from " + this.faces.length);
-        
-        return this.faces[index].on(this.src);
-    }
-
-    public planeAt(index: number): Plane {
-        const tri = this.triAt(index);
-        return new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
-    }
-
-    public neighborsOf(index: number): Truple {
-        const face = this.faceAt(index);
-        const neighbors = new Array();
-        for (const edgeIndex of face.edges) {
-            const edge = this.edges[edgeIndex];
-            neighbors.push(edge.otherFaceOf(index));
-        }
-        return neighbors as Truple;
-    }
-
-    public isManifold(): boolean {
-        for (const edge of this.edges) {
-            if (!edge.isManifold) return false;
-        }
-        return true;
-    }
-
-    public getBoundaryEdge(): Array<number> {
-        const boundaries = new Array<number>;
-        for (const edge of this.edges) {
-            if (!edge.isManifold) boundaries.push(edge.index);
-        }
-        return boundaries;
-    }
-
-    public subGeometry(faceIndices: Set<number>) {
-        return new BenchSubGeometry(this, faceIndices);
-    }
-
-    public assertSourceGeometry(): asserts this is { src: IndexedBufferGeometry } {
-        if (!this.src) throw new Error("Need Source Geometry");
-    }
-
-    public serialize(): SerializedBenchGeometry {
-        return {
-            faces: this.faces.map(face => face.serialize()),
-            edges: this.edges.map(edge => edge.serialize()),
-            unidex: this.unidex
-        }
-    }
-    
-    private getUniqueEdge(a: number, b: number, map: Map<string, BenchEdge>): number {
-        const key = BenchEdge.key(a, b);
-        if (map.has(key)) return map.get(key)!.index;
-
-        const index = this.edges.length;
-        const newEdge = new BenchEdge(index, a, b)
-        this.edges.push(newEdge);
-        map.set(key, newEdge);
-        return index;
-    }
-
-    public static deserialize(data: SerializedBenchGeometry, src?: IndexedBufferGeometry): BenchGeometry {
-        const geometry = new BenchGeometry();
-        data.faces.forEach((faceData, faceIndex) => {
-            geometry.faces.push(BenchFace.deserialize(faceIndex, faceData));
-        });
-
-        data.edges.forEach((edgeData, edgeIndex) => {
-            geometry.edges.push(BenchEdge.deserialize(edgeIndex, edgeData));
-        });
-
-        data.unidex = data.unidex;
-        if (src) geometry.src = src;
-
-        return geometry;
-    }
-}    
 
 class BenchSubGeometry {
     public readonly parent: BenchGeometry;
@@ -300,8 +213,210 @@ class BenchSubGeometry {
     }
 }
 
+
+class BenchGeometry {
+    public edgeAttr!: BufferAttribute; // 4 * edgeCount
+    public faceAttr!: BufferAttribute; // 9 * faceCount
+    public vertMetaAttr!: BufferAttribute; // 2 * VertCount
+    public vertEdgesPool!: TypedArray; // EdgeIndices to Vert
+    public src?: IndexedBufferGeometry;
+
+    constructor() {
+        // initialized later
+    }
+
+    public buildFrom(geometry: IndexedBufferGeometry, useUint16 = false): this {
+        this.src = geometry;
+        const IntArrConstructor = useUint16 ? Uint16Array : Uint32Array;
+        const indexAttr = geometry.index;
+        const faceCount = indexAttr.count / 3;
+        const posAttr = geometry.attributes.position;
+
+        const edgeMap = new Map<string, number>();
+        const vertMap = new Map<string, number>();
+    
+        const edgeTuples: Array<EdgeTuple> = new Array();
+        const vertEdgeSets: Array<Set<number>> = new Array();
+
+        // Face Initialize
+        const faceData = new IntArrConstructor(faceCount * BenchFace.DATA_SIZE);
+        const faceAttr = new BufferAttribute(faceData, BenchFace.DATA_SIZE);
+        this.faceAttr = faceAttr;
+        for (let index = 0; index < indexAttr.count; index += 3) {
+            const faceIndex = index / 3;
+            const face = new BenchFace(this, faceIndex);
+            
+            const a = indexAttr.getX(index);
+            const b = indexAttr.getY(index);
+            const c = indexAttr.getZ(index);
+            
+            const indices: Truple = [a, b, c];
+            const tempPos = new Vector3();
+            const vertIndices = indices.map(vertIndex => {
+                tempPos.fromBufferAttribute(posAttr, vertIndex);
+                const key = BenchVertex.keyOf(tempPos);
+                if (vertMap.has(key)) {
+                    // Return Unique Vertex
+                    const vertIndex = vertMap.get(key)!;
+                    return vertIndex;
+                } else {
+                    // New Vertex
+                    const vertIndex = vertEdgeSets.length;
+                    vertMap.set(key, vertIndex);
+                    // Push PlaceHolder for Edge Set
+                    vertEdgeSets.push(new Set());
+                    return vertIndex;
+                }
+            }) as Truple;
+
+            const v1 = vertIndices[0];
+            const v2 = vertIndices[1];
+            const v3 = vertIndices[2];
+            
+            const edgeIndices = [ [v1, v2], [v2, v3], [v3, v1] ].map(vertDuple => {
+                const edgeVert1 = vertDuple[0];
+                const edgeVert2 = vertDuple[1];
+                const key = BenchEdge.key(edgeVert1, edgeVert2);
+                let resultIndex: number;
+                if (edgeMap.has(key)) {
+                    // Return Unique Edge
+                    resultIndex = edgeMap.get(key)!;
+                    const edgeTuple = edgeTuples[resultIndex];
+                    // The Attach New face be Current Face Index
+                    if (edgeTuple[2] === -1) edgeTuple[2] = faceIndex;
+                    else if (edgeTuple[3] === -1) edgeTuple[3] = faceIndex;
+                    else {
+                        //console.warn("Edge already has two faces!", faceIndex, edgeTuple);
+                    }
+                } else {
+                    // New Edge
+                    resultIndex = edgeTuples.length;
+                    edgeMap.set(key, resultIndex);
+                    edgeTuples.push([
+                        Math.min(edgeVert1, edgeVert2), 
+                        Math.max(edgeVert1, edgeVert2), 
+                        faceIndex, -1
+                    ]);
+                }
+                
+                // Relate Egde to Vertex
+                vertDuple.forEach(vertIndex => {
+                    vertEdgeSets[vertIndex].add(resultIndex);
+                });
+                return resultIndex;
+            }) as Truple;
+
+            face.indices = indices;
+            
+            
+            face.verts = vertIndices;
+            face.edges = edgeIndices;
+
+        }
+
+        // Create Meta Data for Vert
+        const vertMetaTuples: Array<[number, number]> = new Array();
+        let pointer: number = 0;
+        for (const edgeSet of vertEdgeSets) {
+            const size = edgeSet.size;
+            vertMetaTuples.push([pointer, size]);
+            pointer += size;
+        }
+
+        // Fill flat Vert Edges Array
+        this.vertEdgesPool = new IntArrConstructor(pointer);
+        pointer = 0;
+        for (const edgeSet of vertEdgeSets) {
+            for (const edgeIndex of edgeSet) {
+                this.vertEdgesPool[pointer++] = edgeIndex;
+            }
+        }
+
+        // Construct flat metaAttr
+        this.vertMetaAttr = new BufferAttribute(
+            new IntArrConstructor(vertMetaTuples.flat()), 
+            BenchVertex.META_SIZE
+        );
+        
+        // Construct flat edgeAttr
+        this.edgeAttr =  new BufferAttribute(
+            new IntArrConstructor(edgeTuples.flat()), 
+            BenchEdge.DATA_SIZE
+        );
+
+        return this;
+    }
+
+    public faceAt(index: number): BenchFace {
+        return new BenchFace(this, index);
+    }
+
+    public edgeAt(index: number): BenchEdge {
+        return new BenchEdge(this, index);
+    }
+
+    public vertAt(index: number): BenchVertex {
+        return new BenchVertex(this, index);
+    }
+
+    public faceGeometryAt(index: number): IndexedBufferGeometry {
+        this.assertSourceGeometry();
+        return this.faceAt(index).geometryOn(this.src);
+    }
+
+    public triAt(index: number): Triangle {
+        this.assertSourceGeometry();
+        return this.faceAt(index).on(this.src);
+    }
+
+    public planeAt(index: number): Plane {
+        const tri = this.triAt(index);
+        return new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
+    }
+
+    public neighborsOf(index: number): Array<number> {
+        const face = this.faceAt(index);
+        const neighbors = new Array();
+        for (const edgeIndex of face.edges) {
+            const edge = this.edgeAt(edgeIndex);
+            neighbors.push(edge.otherFaceOf(index));
+        }
+        return neighbors;
+    }
+
+    public isManifold(): boolean {
+        for (let index = 0; index < this.edgeAttr.count; index++) {
+            if (!this.edgeAt(index).isManifold) return false;
+        }
+        return true;
+    }
+
+    public getBoundaryEdge(): Array<number> {
+        const boundaries = new Array<number>;
+        for (let index = 0; index < this.edgeAttr.count; index++) {
+            const edge = this.edgeAt(index);
+            if (!edge.isManifold) boundaries.push(edge.index);
+        }
+        return boundaries;
+    }
+
+    public subGeometry(faceIndices: Set<number>) {
+        return new BenchSubGeometry(this, faceIndices);
+    }
+
+    public assertSourceGeometry(): asserts this is { src: IndexedBufferGeometry } {
+        if (!this.src) throw new Error("Need Source Geometry");
+    }
+
+}
+
+export type {
+    BenchVertex,
+    BenchEdge,
+    BenchFace
+}
+
 export {
-    BenchFace,
-    BenchGeometry,
-    BenchSubGeometry
+    BenchSubGeometry,
+    BenchGeometry
 }

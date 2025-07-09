@@ -5,14 +5,13 @@ import {
     Mesh, 
     Plane, 
     Triangle, 
-    Vector2, 
     Vector3, 
     WireframeGeometry, 
     type TypedArray, 
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import { BenchFace, BenchSubGeometry, type BenchGeometry } from "./BenchGeometry";
+import type { BenchGeometry, BenchSubGeometry } from "./BenchGeometry";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 type RunnableFuncKeys<T> = {
@@ -34,49 +33,11 @@ type SerializedAttribute = {
     normalized: boolean;
 };
 
-type TriUV = [Vector2, Vector2, Vector2];
 type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
 type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
 
 
-class BenchTriangle extends Triangle {
-    public readonly uv: TriUV;
-    public readonly matIndex: number;
-    constructor(geometry: BufferGeometry, face: BenchFace) {
-        super();
-        const pos = geometry.attributes.position;
-        const uv = geometry.attributes.uv as BufferAttribute;
-        super.setFromAttributeAndIndices(pos, face.a, face.b, face.c);
-        this.uv = [
-            new Vector2().fromBufferAttribute(uv, face.a),
-            new Vector2().fromBufferAttribute(uv, face.b),
-            new Vector2().fromBufferAttribute(uv, face.c)
-        ];
-        this.matIndex = BenchTriangle.getMaterialIndex(geometry, face.index)!;
-    }
-    
-    public static getMaterialIndex(geometry: BufferGeometry, faceIndex: number): number | undefined {
-        const triangleStartIndex = faceIndex * 3;
 
-        for (const group of geometry.groups) {
-            const groupStart = group.start;
-            const groupEnd = group.start + group.count;
-
-            if (triangleStartIndex >= groupStart && triangleStartIndex < groupEnd) {
-                return group.materialIndex;
-            }
-        }
-
-        return undefined; // if no group matched
-    }
-
-    public createGeometry() {
-        const geometry = new BufferGeometry();
-        geometry.setFromPoints([this.a, this.b, this.c]);
-        geometry.setIndex([0, 1, 2]);
-        return geometry;
-    }
-}
 
 class GeometryUtil {
 
@@ -184,7 +145,7 @@ class GeometryUtil {
         return new WireframeGeometry(geometry);
     }
 
-    public static createCoplanar(benchGeom: BenchGeometry, baseIndex: number): BenchSubGeometry {
+    public static createCoplane(benchGeom: BenchGeometry, baseIndex: number): BenchSubGeometry {
         const basePlane = benchGeom.planeAt(baseIndex);
         const visited = new Set<number>();
         const toVisit = [baseIndex];
@@ -198,7 +159,9 @@ class GeometryUtil {
             const curTri = benchGeom.triAt(curIndex)
             const coplanar = GeometryUtil.isCoplanar(curTri, basePlane);
             
-            if (!coplanar) continue;
+            if (!coplanar) {
+                continue;
+            }
 
             // Add original triangle indices
             result.add(curIndex);

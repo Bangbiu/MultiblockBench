@@ -15,7 +15,6 @@ import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
 import { GeometryUtil, type GeometryIndexedMesh, type IndexedBufferGeometry } from '../util/GeometryUtil';
 import { Selection } from '../gui/Selection';
 import { BenchGeometry, BenchSubGeometry } from '../util/BenchGeometry';
-import type { BenchExtraction } from './BenchOutput';
 import { MaterialUtil } from '../util/MaterialUtil';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
@@ -180,7 +179,6 @@ class BenchMesh extends Group {
     private readonly wireframe: LineSegments;
     private readonly mesh: GeometryIndexedMesh;
     public readonly geometry: BenchGeometry;
-
     constructor(loadedMesh: Mesh) {
         super();
         const config = window.config.model;
@@ -208,7 +206,7 @@ class BenchMesh extends Group {
     }
 
     public async createGeometry() {
-        await this.geometry.create(this.mesh.geometry as IndexedBufferGeometry);
+        await this.geometry.buildFrom(this.mesh.geometry as IndexedBufferGeometry);
     }
 
     public async createWireframe() {

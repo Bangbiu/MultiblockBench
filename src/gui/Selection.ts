@@ -4,7 +4,7 @@ import {
     Mesh, 
     MeshBasicMaterial,  
 } from "three";
-import { GeometryUtil, type IndexedBufferGeometry } from "../util/GeometryUtil";
+import { GeometryUtil } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
 import type { BenchSubGeometry } from "../util/BenchGeometry";
 
@@ -38,7 +38,8 @@ class SelectedFace extends Mesh {
         const benchMesh = isect.benchMesh;
         if (isect.faceIndex) {
             // Create triangle geometry
-            this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
+            //this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
+            this.geometry = benchMesh.geometry.faceGeometryAt(isect.faceIndex);
         }
 
         this.visible = true;
@@ -57,9 +58,8 @@ class SelectedPlane extends Mesh  {
                 opacity: opacity
             });
         const benchMesh = isect.benchMesh;
-        this.subGeom = GeometryUtil.createCoplanar(benchMesh.geometry, isect.faceIndex!);
+        this.subGeom = GeometryUtil.createCoplane(benchMesh.geometry, isect.faceIndex!);
         this.geometry = this.subGeom.bareGeom;
-        //this.geometry = GeometryUtil.canonicalize(srcMesh.geometry as IndexedBufferGeometry);
         this.visible = true;
     }
 
