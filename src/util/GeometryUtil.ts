@@ -36,9 +36,6 @@ type SerializedAttribute = {
 type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
 type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
 
-
-
-
 class GeometryUtil {
 
     public static combineGroupGeometries(loadedObj: Group): BufferGeometry | null {
@@ -197,7 +194,7 @@ class GeometryUtil {
         let newVertexCounter = 0;
 
         for (const face of subGeometry.faces()) {
-            const [a, b, c] = face.verts;
+            const [a, b, c] = face.vertIndices;
 
             for (const vi of [a, b, c]) {
                 if (!usedVertexMap.has(vi)) {
