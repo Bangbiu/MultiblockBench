@@ -106,6 +106,14 @@ class App {
             }
         });
 
+        this.renderer.domElement.addEventListener('contextmenu', (event: MouseEvent) => {
+            event.preventDefault();
+            const menu = document.getElementById('context-menu')!;
+            menu.style.left = `${event.clientX}px`;
+            menu.style.top = `${event.clientY}px`;
+            menu.style.display = 'block';
+        });
+
         App.connect(this.wireframeCheckbox, this.model, "showWireframe");
         App.connect(this.hideMeshCheckbox, this.model, "hideMeshes");
 

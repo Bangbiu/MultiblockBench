@@ -14,8 +14,9 @@ import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
 import { GeometryUtil, type GeometryIndexedMesh, type IndexedBufferGeometry } from '../util/GeometryUtil';
 import { Selection } from '../gui/Selection';
-import { BenchGeometry, BenchSubGeometry } from '../util/BenchGeometry';
+import { BenchGeometry } from '../util/BenchGeometry';
 import { MaterialUtil } from '../util/MaterialUtil';
+import type { BenchSubGeometry } from '../util/SubGeometries';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
 

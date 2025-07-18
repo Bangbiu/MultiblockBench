@@ -184,3 +184,14 @@ canvas {
   width: 0%;
   transition: width 0.2s ease;
 }
+
+.contextMenu {
+    display: none;
+    position: absolute;
+    background: #333;
+    color: white;
+    padding: 5px 10px;
+    border-radius: 4px;
+    font-family: sans-serif;
+    z-index: 1000;
+}

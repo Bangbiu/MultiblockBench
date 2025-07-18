@@ -11,7 +11,8 @@ import {
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import type { BenchGeometry, BenchSubGeometry } from "./BenchGeometry";
+import { BenchEdge, type BenchGeometry, type IndexSet } from "./BenchGeometry";
+import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 type RunnableFuncKeys<T> = {
@@ -68,7 +69,7 @@ class GeometryUtil {
         for (let i = 0; i < indexAttr.count; i++) {
             const posIndex = indexAttr.getX(i);
             tmpVec.fromBufferAttribute(position, posIndex);
-            const key = vertKey(tmpVec);
+            const key = posKey(tmpVec);
 
             let canonicalIndex = keyToIndex.get(key);
             if (canonicalIndex === undefined) {
@@ -96,28 +97,10 @@ class GeometryUtil {
         return newGeo as IndexedBufferGeometry;
     }
 
-    public static createCanonicalIndexArray(geometry: IndexedBufferGeometry, outputArray?: Array<number>): Array<number> {
-        const position = geometry.attributes.position as BufferAttribute;
-        const indices = geometry.index;
-        const canonicalIndexMap = new Map<string, number>(); // key → canonical index
-        //const canonicalPositions: Vector3[] = [];
-
-        let canonicalCounter = 0;
-        const result = outputArray ?? new Array();
-        for (let i = 0; i < indices.count; i++) {
-            const posIndex = indices.getX(i);
-            const pos = new Vector3().fromBufferAttribute(position, posIndex);
-            const key = vertKey(pos);
-
-            let canonicalIdx = canonicalIndexMap.get(key);
-            if (canonicalIdx === undefined) {
-                canonicalIdx = canonicalCounter++;
-                canonicalIndexMap.set(key, canonicalIdx);
-            }
-
-            result.push(canonicalIdx);
-        }
-        return result;
+    public static createSequentialIndicesAttr(size: number) {
+        const result = new Uint32Array(size);
+        for (let i = 0; i < size; i++) result[i] = i;
+        return new BufferAttribute(result, 1);
     }
 
     public static mergeIndexedGeometries(geometries: IndexedBufferGeometry[]): IndexedBufferGeometry {
@@ -142,11 +125,28 @@ class GeometryUtil {
         return new WireframeGeometry(geometry);
     }
 
+    public static createPlainGeometry(subGeom: BenchSubGeometry): IndexedBufferGeometry {
+        const positions = new Float32Array(subGeom.size * 9);
+        let pointer = 0;
+        for (const face of subGeom.fetch()) {
+            const tri = face.tri();
+            tri.a.toArray(positions, pointer);
+            tri.b.toArray(positions, pointer += 3);
+            tri.c.toArray(positions, pointer += 3);
+            pointer += 3;
+        }
+
+        const geom = new BufferGeometry();
+        geom.attributes.position = new BufferAttribute(positions, 3);
+        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(subGeom.size * 3));
+        return geom as IndexedBufferGeometry;
+    }
+
     public static createCoplane(benchGeom: BenchGeometry, baseIndex: number): BenchSubGeometry {
         const basePlane = benchGeom.planeAt(baseIndex);
         const visited = new Set<number>();
         const toVisit = [baseIndex];
-        const result: Set<number> = new Set();
+        const result = new BenchSubGeometry(benchGeom);
 
         while (toVisit.length > 0) {
             const curIndex = toVisit.pop()!;
@@ -170,10 +170,45 @@ class GeometryUtil {
             }
         }
         
-        return benchGeom.subGeometry(result);
+        return result;
     }
 
-    public static isCoplanar(tri: Triangle, basePlane: Plane, COPLANAR_TOLERANCE = 0.02, NORMAL_TOLERANCE = 0.2) {
+    public static createEdgesGeometry(edges: IndexSet<BenchEdge>): IndexedBufferGeometry {
+        const positions = new Float32Array(edges.size * 2 * 3);
+        let pointer = 0;
+        for (const edge of edges.fetch()) {
+            for (const vert of edge.verts()) {
+                vert.pos().toArray(positions, pointer);
+                pointer += 3;
+            }
+        }
+        const geom = new BufferGeometry();
+        geom.attributes.position = new BufferAttribute(positions, 3);
+        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(edges.size * 2));
+        return geom as IndexedBufferGeometry;
+    }
+
+    public static createEdgeLoopGeometry(loop: EdgeLoop): IndexedBufferGeometry {
+        const positions = new Float32Array(loop.length * 3);
+        let pointer = 0;
+        for (const vert of loop.fetch()) {
+            vert.pos().toArray(positions, pointer);
+            pointer += 3;
+        }
+        // Intermittent Edge-Like Index: 0-1, 1-2, 2-3
+        const indexArr = new Uint32Array((loop.length - 1) * 2);
+        for (let index = 0; index < loop.length - 1; index++) {
+            indexArr[index * 2] = index;
+            indexArr[index * 2 + 1] = index + 1;
+        }
+        
+        const geom = new BufferGeometry();
+        geom.attributes.position = new BufferAttribute(positions, 3);
+        geom.setIndex(new BufferAttribute(indexArr, 1));
+        return geom as IndexedBufferGeometry;
+    }
+
+    public static isCoplanar(tri: Triangle, basePlane: Plane, COPLANAR_TOLERANCE = 0.02, NORMAL_TOLERANCE = 0.5) {
         const plane = new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
         const aligned = plane.normal.angleTo(basePlane.normal) < NORMAL_TOLERANCE;
         if (!aligned) return false;
@@ -193,7 +228,7 @@ class GeometryUtil {
 
         let newVertexCounter = 0;
 
-        for (const face of subGeometry.faces()) {
+        for (const face of subGeometry.fetch()) {
             const [a, b, c] = face.vertIndices;
 
             for (const vi of [a, b, c]) {
@@ -363,7 +398,14 @@ function assertIndexedGeometry(geom: BufferGeometry): asserts geom is IndexedBuf
     if (!geom.index) throw new Error("Geometry must be indexed.");
 }
 
-function vertKey(v: Vector3) {
+function plug(arr: TypedArray, start: number, iterable: Iterable<number>) {
+    let pointer = start;
+    for (const data of iterable) {
+        arr[pointer++] = data;
+    }
+}
+
+function posKey(v: Vector3) {
     return `${v.x.toFixed(5)}_${v.y.toFixed(5)}_${v.z.toFixed(5)}`;
 }
 

@@ -1,12 +1,14 @@
 import {  
     DoubleSide, 
     Group, 
+    LineBasicMaterial, 
+    LineSegments, 
     Mesh, 
     MeshBasicMaterial,  
 } from "three";
 import { GeometryUtil } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
-import type { BenchSubGeometry } from "../util/BenchGeometry";
+import { EdgeLoop, type BenchSubGeometry } from "../util/SubGeometries";
 
 
 class Selection extends Group {
@@ -38,7 +40,7 @@ class SelectedFace extends Mesh {
         const benchMesh = isect.benchMesh;
         if (isect.faceIndex) {
             // Create triangle geometry
-            //this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
+            // this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
             this.geometry = benchMesh.geometry.faceGeometryAt(isect.faceIndex);
         }
 
@@ -59,7 +61,13 @@ class SelectedPlane extends Mesh  {
             });
         const benchMesh = isect.benchMesh;
         this.subGeom = GeometryUtil.createCoplane(benchMesh.geometry, isect.faceIndex!);
-        this.geometry = this.subGeom.bareGeom;
+        this.geometry = this.subGeom.plainGeometry;
+        const boundary = new LineSegments(
+            GeometryUtil.createEdgeLoopGeometry(this.subGeom.edgeLoop), 
+            new LineBasicMaterial({ color: 0xFF00FF })
+        );
+        boundary.renderOrder = 1;
+        this.add(boundary);
         this.visible = true;
     }
 

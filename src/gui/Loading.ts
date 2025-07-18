@@ -1,5 +1,4 @@
-type AnyArgs = any[]
-type AnyAction = (...args: AnyArgs) => void;
+
 
 type ProgressRange = {
     start: number,

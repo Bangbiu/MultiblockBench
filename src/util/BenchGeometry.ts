@@ -7,7 +7,6 @@ import {
 } from 'three';
 import { GeometryUtil, type IndexedBufferGeometry } from './GeometryUtil';
 
-type Truple = [number, number, number];
 type EdgeTuple = [number, number, number, number]; // [v1, v2, f1, f2]
 
 interface BenchReferer {
@@ -16,7 +15,49 @@ interface BenchReferer {
     readonly data: TypedArray; // SubArray of Parent Data Array
 }
 
-type ReferCreator<BR extends BenchReferer> = (index: number) => BR;
+interface BenchRefererCtor<BR extends BenchReferer> {
+  new (parent: BenchGeometry, index: number): BR;
+}
+
+type VertexData = {
+    canonicIndex: number
+    edges: Set<number>
+}
+
+class IndexArray<BR extends BenchReferer> extends Array<number> {
+    public readonly parent: BenchGeometry;
+    public readonly creator: BenchRefererCtor<BR>;
+    constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
+        super(...iterable ?? []);
+        this.parent = parent;
+        this.creator = creator;
+    }
+
+    public fetch(): Array<BR> {
+        const result = new Array<BR>();
+        for (const index of this) 
+            result.push(new this.creator(this.parent, index));
+        return result;
+    }
+}
+
+class IndexSet<BR extends BenchReferer> extends Set<number> {
+    public readonly parent: BenchGeometry;
+    public readonly creator: BenchRefererCtor<BR>;
+    constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
+        super(iterable);
+        this.parent = parent;
+        this.creator = creator;
+    }
+
+    public fetch(): Set<BR> {
+        const result = new Set<BR>();
+        for (const index of this) 
+            result.add(new this.creator(this.parent, index));
+        return result;
+    }
+}
+
 
 
 /**
@@ -24,24 +65,34 @@ type ReferCreator<BR extends BenchReferer> = (index: number) => BR;
  * 
  * Created from BenchGeometry By 
  * 
- * Starting Index and Data Length in vertEdges and vertFaces Index Pool
- * 
+ * Elements from Starting Index to Starting Index + 3
+ * Described by
+ * [ canonicalIndex, dataStartingIndex, dataLength ]
  * Able to create related Bench Edge and BenchFace Instance
  * 
  */
-class BenchVertex implements BenchReferer{
+class BenchVertex implements BenchReferer {
     public readonly parent: BenchGeometry;
     public readonly index: number;
+    public readonly canonicIndex: number;
     public readonly data: TypedArray;
     public readonly edgeCount: number;
     constructor(parent: BenchGeometry, index: number) {
         this.parent = parent;
         this.index = index;
-        const head = parent.vertMetaAttr.getX(index);
-        const rear = head + parent.vertMetaAttr.getY(index);
+        this.canonicIndex = parent.vertMetaAttr.getX(index);
+        const head = parent.vertMetaAttr.getY(index);
+        const rear = head + parent.vertMetaAttr.getZ(index);
         this.data = this.parent.vertEdgesPool
         .subarray(head, rear);
         this.edgeCount = this.data.length;
+    }
+
+    public pos(): Vector3 {
+        return new Vector3().fromBufferAttribute(
+            this.parent.src!.attributes.position, 
+            this.canonicIndex
+        );
     }
 
     public static keyOf(v: Vector3) {
@@ -52,7 +103,7 @@ class BenchVertex implements BenchReferer{
         return `${x.toFixed(5)}_${y.toFixed(5)}_${z.toFixed(5)}`;
     }
 
-    public static readonly META_SIZE = 2;
+    public static readonly META_SIZE = 3;
 }
 
 /**
@@ -85,11 +136,19 @@ class BenchEdge implements BenchReferer{
 
     public get f1(): number { return this.data[2]; }
     public get f2(): number { return this.data[3]; }
+
+    public get vertIndices(): Duple { return [this.a, this.b]; }  
+    public get faceIndices(): Duple { return [this.f1, this.f2]; }
     
     public get isManifold(): boolean {
         return this.f1 !== -1 && this.f2 !== -1;
     }
 
+    public verts(): BiData<BenchVertex> {
+        return [this.parent.vertAt(this.data[0]),
+                this.parent.vertAt(this.data[1])];
+    }
+    
     public attachFace(faceIndex: number): boolean {
         if (this.f1 === -1) this.data[2] = faceIndex;
         else if (this.f2 === -1) this.data[3] = faceIndex;
@@ -188,43 +247,16 @@ class BenchFace implements BenchReferer {
         return GeometryUtil.createTriangleGeometry(this.tri());
     }
 
-    public edges(): Set<BenchEdge> {
-        return derefer(this.edgeIndices, this.parent.edgeAt);
+    public edges(): TriData<BenchEdge> {
+        return [
+            this.parent.edgeAt(this.data[3]), 
+            this.parent.edgeAt(this.data[4]),
+            this.parent.edgeAt(this.data[5])
+        ];
     }
 
     public static readonly DATA_SIZE = 9;
 }
-
-
-
-class BenchSubGeometry {
-    public readonly parent: BenchGeometry;
-    public readonly bareGeom: IndexedBufferGeometry;
-    public readonly faceIndices: Set<number>;
-    constructor(parent: BenchGeometry, faceIndices: Set<number>) {
-        this.parent = parent;
-        this.faceIndices = faceIndices;
-        const geometries = new Array<IndexedBufferGeometry>();
-        for (const index of faceIndices) {
-            geometries.push(parent.faceGeometryAt(index));
-        }
-        this.bareGeom = GeometryUtil.mergeIndexedGeometries(geometries);
-    }
-
-    public get size(): number {
-        return this.faceIndices.size;
-    }
-
-    public faces(): Set<BenchFace> {
-        return derefer(this.faceIndices, this.parent.faceAt);
-    }
-
-    public addAll(indices: Array<number>): this {
-        indices.forEach(index => this.faceIndices.add(index));
-        return this;
-    }
-}
-
 
 class BenchGeometry {
     public edgeAttr!: BufferAttribute; // 4 * edgeCount
@@ -251,7 +283,7 @@ class BenchGeometry {
         const vertMap = new Map<string, number>();
     
         const edgeTuples: Array<EdgeTuple> = new Array();
-        const vertEdgeSets: Array<Set<number>> = new Array();
+        const vertDataList: Array<VertexData> = new Array();
 
         // Face Initialize
         const faceData = new IntArrConstructor(faceCount * BenchFace.DATA_SIZE);
@@ -259,7 +291,7 @@ class BenchGeometry {
         this.faceAttr = faceAttr;
         for (let index = 0; index < indexAttr.count; index += 3) {
             const faceIndex = index / 3;
-            const face = new BenchFace(this, faceIndex);
+            const face = this.faceAt(faceIndex);
             
             const a = indexAttr.getX(index);
             const b = indexAttr.getY(index);
@@ -267,19 +299,21 @@ class BenchGeometry {
             
             const indices: Truple = [a, b, c];
             const tempPos = new Vector3();
-            const vertIndices = indices.map(vertIndex => {
-                tempPos.fromBufferAttribute(posAttr, vertIndex);
+            const vertIndices = indices.map(posIndex => {
+                tempPos.fromBufferAttribute(posAttr, posIndex);
                 const key = BenchVertex.keyOf(tempPos);
                 if (vertMap.has(key)) {
-                    // Return Unique Vertex
-                    const vertIndex = vertMap.get(key)!;
-                    return vertIndex;
+                    // Return Unique Vertex Index
+                    return vertMap.get(key)!;
                 } else {
                     // New Vertex
-                    const vertIndex = vertEdgeSets.length;
+                    const vertIndex = vertDataList.length;
                     vertMap.set(key, vertIndex);
                     // Push PlaceHolder for Edge Set
-                    vertEdgeSets.push(new Set());
+                    vertDataList.push({
+                        canonicIndex: posIndex,
+                        edges: new Set()
+                    });
                     return vertIndex;
                 }
             }) as Truple;
@@ -316,7 +350,7 @@ class BenchGeometry {
                 
                 // Relate Egde to Vertex
                 vertDuple.forEach(vertIndex => {
-                    vertEdgeSets[vertIndex].add(resultIndex);
+                    vertDataList[vertIndex].edges.add(resultIndex);
                 });
                 return resultIndex;
             }) as Truple;
@@ -328,28 +362,27 @@ class BenchGeometry {
         }
 
         // Create Meta Data for Vert
-        const vertMetaTuples: Array<[number, number]> = new Array();
+        const vertCount = vertDataList.length;
+        const vertMetaArr = new IntArrConstructor(vertCount * BenchVertex.META_SIZE);
+        this.vertMetaAttr = new BufferAttribute(vertMetaArr, BenchVertex.META_SIZE);
         let pointer: number = 0;
-        for (const edgeSet of vertEdgeSets) {
-            const size = edgeSet.size;
-            vertMetaTuples.push([pointer, size]);
+        for (let vertIndex = 0; vertIndex < vertDataList.length; vertIndex++) {
+            const dataIndex = vertIndex * BenchVertex.META_SIZE;
+            const size = vertDataList[vertIndex].edges.size;
+            vertMetaArr[dataIndex] = vertDataList[vertIndex].canonicIndex;
+            vertMetaArr[dataIndex + 1] = pointer;
+            vertMetaArr[dataIndex + 2] = size;
             pointer += size;
         }
 
         // Fill flat Vert Edges Array
         this.vertEdgesPool = new IntArrConstructor(pointer);
         pointer = 0;
-        for (const edgeSet of vertEdgeSets) {
-            for (const edgeIndex of edgeSet) {
+        for (const vertData of vertDataList) {
+            for (const edgeIndex of vertData.edges) {
                 this.vertEdgesPool[pointer++] = edgeIndex;
             }
         }
-
-        // Construct flat metaAttr
-        this.vertMetaAttr = new BufferAttribute(
-            new IntArrConstructor(vertMetaTuples.flat()), 
-            BenchVertex.META_SIZE
-        );
         
         // Construct flat edgeAttr
         this.edgeAttr =  new BufferAttribute(
@@ -370,6 +403,14 @@ class BenchGeometry {
 
     public vertAt(index: number): BenchVertex {
         return new BenchVertex(this, index);
+    }
+
+    public indexSetOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): IndexSet<BR> {
+        return new IndexSet(this, ctor, iterable);
+    }
+
+    public indexArrayOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): IndexArray<BR> {
+        return new IndexArray(this, ctor, iterable);
     }
 
     public faceGeometryAt(index: number): IndexedBufferGeometry {
@@ -413,31 +454,17 @@ class BenchGeometry {
         return boundaries;
     }
 
-    public subGeometry(faceIndices: Set<number>) {
-        return new BenchSubGeometry(this, faceIndices);
-    }
-
     public assertSourceGeometry(): asserts this is { src: IndexedBufferGeometry } {
         if (!this.src) throw new Error("Need Source Geometry");
     }
 
 }
 
-function derefer<BR extends BenchReferer>(subIndice: Iterable<number>, creator: ReferCreator<BR>): Set<BR> {
-    const result = new Set<BR>();
-    for (const index of subIndice) {
-        result.add(creator(index));
-    }
-    return result;
-}
-
-export type {
+export {
+    IndexSet,
+    IndexArray,
     BenchVertex,
     BenchEdge,
-    BenchFace
-}
-
-export {
-    BenchSubGeometry,
+    BenchFace,
     BenchGeometry
 }
