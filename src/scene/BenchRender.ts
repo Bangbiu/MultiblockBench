@@ -64,13 +64,12 @@ class FullScreenCamera extends PerspectiveCamera {
     }
 }
 
-class ModelOrbitalControl extends OrbitControls{
+class ModelOrbitalControl extends OrbitControls {
     constructor(camera: PerspectiveCamera, renderer: WebGLRenderer) {
         super(camera, renderer.domElement);
-        //this.enableDamping = true;
-        //this.dampingFactor = 0.05;
+        this.enableDamping = true;
+        this.dampingFactor = 0.05;
         this.target.set(0, 0, 0); // rotate around the origin
-        this.update();
     }
 }
 

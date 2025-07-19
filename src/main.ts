@@ -7,6 +7,7 @@ import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
 import { BenchOutput } from './scene/BenchOutput';
+import { BenchMenu, type MenuDeclaration } from './gui/BenchMenu';
 
 
 // Global Var
@@ -28,12 +29,13 @@ class App {
     public readonly model: BenchModel;
     public readonly output: BenchOutput;
     // GUI
+    public readonly menu: BenchMenu;
     public readonly objFileInput: HTMLInputElement;
     public readonly wireframeCheckbox: HTMLInputElement;
     public readonly hideMeshCheckbox: HTMLInputElement;
     public readonly extractSelectedBtn: HTMLButtonElement;
     public readonly loadingUI: LoadingUI;
-
+    
     constructor() {
         this.camera = new FullScreenCamera();
         this.scene = this.createScene();
@@ -53,7 +55,14 @@ class App {
         this.hideMeshCheckbox = App.loadElement("hideMeshCheckbox") as HTMLInputElement;
         this.extractSelectedBtn = App.loadElement("extractSelectedBtn") as HTMLButtonElement;
         this.loadingUI = new LoadingUI();
-
+        // Menu
+        const menuSetting: MenuDeclaration = {
+            "Load Object...": { type: "checkBox", action: this.objFileInput.click.bind(this.objFileInput)},
+            Select: ()=>console.log("123"),
+            Delete: {type: "checkBox"},
+            Inspect: {type: "checkBox"},
+        }
+        this.menu = new BenchMenu(menuSetting);
         App.INSTANCE = this;
     }
 
@@ -75,6 +84,8 @@ class App {
     public registerEvents(): this {
         // Mouse
         document.addEventListener("mousedown", (event) => {
+            if (event.target !== this.renderer.domElement) return;
+            this.menu.hide();
             if (event.button == 2) return;
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
@@ -108,10 +119,7 @@ class App {
 
         this.renderer.domElement.addEventListener('contextmenu', (event: MouseEvent) => {
             event.preventDefault();
-            const menu = document.getElementById('context-menu')!;
-            menu.style.left = `${event.clientX}px`;
-            menu.style.top = `${event.clientY}px`;
-            menu.style.display = 'block';
+            this.menu.show(event.clientX, event.clientY);
         });
 
         App.connect(this.wireframeCheckbox, this.model, "showWireframe");
@@ -124,6 +132,7 @@ class App {
         this.renderer.outlinePass.selectedObjects = this.model.selection ? [this.model.selection.benchMesh] : [];
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
+        this.orbitalControl.update();
     }
 
     public static connect<T, K extends BooleanKeys<T>>(checkbox: HTMLInputElement, obj: T, property: K): void {
