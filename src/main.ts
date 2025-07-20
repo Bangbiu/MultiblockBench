@@ -8,6 +8,7 @@ import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
 import { BenchOutput } from './scene/BenchOutput';
 import { BenchMenu, type MenuDeclaration } from './gui/BenchMenu';
+import type { Wireframe } from 'three/examples/jsm/Addons.js';
 
 
 // Global Var
@@ -57,10 +58,16 @@ class App {
         this.loadingUI = new LoadingUI();
         // Menu
         const menuSetting: MenuDeclaration = {
-            "Load Object...": { type: "checkBox", action: this.objFileInput.click.bind(this.objFileInput)},
-            Select: ()=>console.log("123"),
-            Delete: {type: "checkBox"},
-            Inspect: {type: "checkBox"},
+            "Load Object...": this.objFileInput.click.bind(this.objFileInput),
+            Wireframe: { 
+                type: "checkBox", 
+                checked: true,
+                action: (checked) => this.model.showWireframe = checked 
+            },
+            Hidden: { 
+                type: "checkBox", 
+                action: (checked) => this.model.hideMeshes = checked 
+            },
         }
         this.menu = new BenchMenu(menuSetting);
         App.INSTANCE = this;

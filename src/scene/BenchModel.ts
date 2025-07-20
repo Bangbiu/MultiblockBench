@@ -83,6 +83,7 @@ class BenchModel extends Group {
         .finally("Create Wireframe",
             this.createWireframes.bind(this))
         .work();
+        this.refresh();
     }
 
     public fromGroup(group: Group) {
@@ -106,6 +107,11 @@ class BenchModel extends Group {
             this.add(this.selection);
         }
         return this;
+    }
+
+    public refresh() {
+        this.showWireframe = this._showWireframe;
+        this.hideMeshes = this._hideMeshes;
     }
 
     public async runOnAll(callback: BenchMeshAsyncFn, eventHandler?: SubTaskHandler) {

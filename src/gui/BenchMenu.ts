@@ -1,23 +1,31 @@
+import { BenchObject } from "../util/DataUtil";
+
+type CheckBoxCallBack = (status: boolean) => void;
 const DO_NOTHING = () => {};
 
-class ContextMenuOption {
+class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = any> extends BenchObject<TSelf> {
     public readonly div: HTMLDivElement;
     protected readonly caption: HTMLSpanElement;
+    protected readonly box: HTMLSpanElement;
     private _action: AnyAction = DO_NOTHING;
-    constructor(label: string, action?: AnyAction) {
+    constructor( parameters: Partial<TSelf> = {} ) {
+        super();
         const div = document.createElement("div");
         this.div = div;
         
         // Create and append caption element
         const caption = document.createElement("span");
+        caption.style.marginRight = "12px";
         this.caption = caption;
         this.div.appendChild(caption);
-        this.label = label;
-        
-        if (action) this.action = action;
 
+        div.style.display = "flex";
+        div.style.alignItems = "center";
+        div.style.justifyContent = "space-between";
         div.style.padding = '6px 12px';
         div.style.cursor = 'pointer';
+        
+        
         div.style.userSelect = 'none';
 
         div.addEventListener('mouseenter', () => {
@@ -26,6 +34,21 @@ class ContextMenuOption {
         div.addEventListener('mouseleave', () => {
             div.style.background = 'transparent';
         });
+
+        // Right PlaceHolder
+        this.box = document.createElement("span");
+        this.div.appendChild(this.box);
+        const boxStyle = this.box.style;
+        boxStyle.display = "inline-block";
+        boxStyle.marginLeft = "auto";
+        boxStyle.width = "20px";
+        boxStyle.height = "20px";
+        boxStyle.boxSizing = "border-box";
+        boxStyle.position = "relative"; // to position inner box absolutely
+        boxStyle.userSelect = "none";
+        boxStyle.visibility = "hidden";
+
+        this.updateValues(parameters);
     }
 
     public get action() { return this._action; }
@@ -47,33 +70,16 @@ class ContextMenuOption {
     }
 };
 
-class CheckBoxOption extends ContextMenuOption {
-    private readonly box: HTMLSpanElement;
+class CheckBoxOption extends ContextMenuOption<CheckBoxOption> {
     private readonly innerBox: HTMLSpanElement;
     private _checked: boolean = false;
 
-    constructor(label: string, initialState: boolean = false) {
-        super(label);
-
-        // Setup layout
-        this.div.style.display = "flex";
-        this.div.style.alignItems = "center";
-        this.div.style.justifyContent = "space-between";
-        this.caption.style.marginRight = "8px";
-
+    constructor( parameters: Partial<CheckBoxOption> = {} ) {
+        super();
         // Outer box
-        this.box = document.createElement("span");
-        this.div.appendChild(this.box);
-
         const boxStyle = this.box.style;
-        boxStyle.display = "inline-block";
-        boxStyle.marginLeft = "auto";
-        boxStyle.width = "20px";
-        boxStyle.height = "20px";
         boxStyle.border = "1px solid #ccc";
-        boxStyle.boxSizing = "border-box";
-        boxStyle.position = "relative"; // to position inner box absolutely
-        boxStyle.userSelect = "none";
+        boxStyle.visibility = "visible";
 
         // Inner box (status indicator)
         this.innerBox = document.createElement("span");
@@ -87,11 +93,17 @@ class CheckBoxOption extends ContextMenuOption {
         innerStyle.background = "transparent";
         this.box.appendChild(this.innerBox);
 
-        this.checked = initialState;
-
-        this.div.addEventListener("click", () => {
+        this.addEventListener("click", () => {
             this.checked = !this.checked;
         });
+
+        this.checked = false;
+        this.updateValues(parameters);
+    }
+
+    public get action() { return super.action; }
+    public set action(callback: CheckBoxCallBack) {
+        super.action = () => callback(this._checked);
     }
 
     public get checked(): boolean {
@@ -105,12 +117,12 @@ class CheckBoxOption extends ContextMenuOption {
 }
 
 
-class SubMenuOption extends ContextMenuOption {
-    public readonly subMenu: ContextMenu;
-    constructor(label: string, subMenu?: ContextMenu) {
-        super(label);
+class SubMenuOption extends ContextMenuOption<SubMenuOption> {
+    public readonly subMenu?: ContextMenu;
+    constructor( parameters: Partial<SubMenuOption> = {} ) {
+        super();
         this.action = this.showSubMenu.bind(this);
-        this.subMenu = subMenu ?? new ContextMenu();
+        this.updateValues(parameters);
     }
 
     public showSubMenu() {
@@ -122,32 +134,28 @@ class SubMenuOption extends ContextMenuOption {
     }
 }
 
-type OptionConstructor = new (label: string, ...args: any[]) => ContextMenuOption;
+type MenuOptType = {
+    option: typeof ContextMenuOption,
+    subMenu: typeof SubMenuOption,
+    checkBox: typeof CheckBoxOption,
+};
 
-const MenuOptType = {
-  option: ContextMenuOption,
-  subMenu: SubMenuOption,
-  checkBox: CheckBoxOption,
-} as const;
+const MenuOptCtor: MenuOptType = {
+    option: ContextMenuOption,
+    subMenu: SubMenuOption,
+    checkBox: CheckBoxOption,
+};
 
-const MenuOptCtor: Record<string, OptionConstructor> = MenuOptType;
+type MenuOptTypeKey = keyof MenuOptType;
+type MenuOptDeclaration = {
+    [K in keyof MenuOptType]: {
+        type: K;
+    } & Partial<InstanceType<MenuOptType[K]>>
+}[keyof MenuOptType];
 
-type MenuOptTypeMap = typeof MenuOptType;
-type MenuOptKind = keyof MenuOptTypeMap;
-type Tail<T extends any[]> = T extends [any, ...infer Rest] ? Rest : never;
-type MenuOptCtor<T extends MenuOptKind> = Tail<ConstructorParameters<MenuOptTypeMap[T]>>;
+type MenuOptData = MenuOptDeclaration | MenuOptTypeKey | AnyAction
 
-type MenuOptDeclaration<T extends MenuOptKind> = {
-    type: T;
-    action?: AnyAction;
-    args?: MenuOptCtor<T>;
-} | AnyAction | MenuOptKind;
-
-type AnyMenuOpt = {
-    [K in MenuOptKind]: MenuOptDeclaration<K>;
-}[MenuOptKind];
-
-type MenuDeclaration = Record<string, AnyMenuOpt>;
+type MenuDeclaration = Record<string, MenuOptData>;
 
 class ContextMenu {
     public readonly element: HTMLDivElement;
@@ -193,19 +201,21 @@ class BenchMenu extends ContextMenu {
         }
     }
 
-    public add<T extends MenuOptKind>(label: string, data: MenuOptDeclaration<T>): Opt<ContextMenuOption> {
+    public add(label: string, data: MenuOptData): Opt<ContextMenuOption> {
         let option: Opt<ContextMenuOption> = undefined;
         if (typeof data == "string") 
-            option = new MenuOptCtor[data](label);
+            // Type String Only
+            option = new MenuOptCtor[data]({ label: label });
         else if (typeof data === "function")
-            option = new ContextMenuOption(label, data);
+            // Action Only
+            option = new ContextMenuOption({ label: label, action: data });
         else if (typeof data === "object") {
-            const ctor = MenuOptCtor[data.type];
-            option = data.args ? new ctor(label, ...data.args) : new ctor(label);
-            if (data.action) 
-                option.action = data.action;
+            // Declaration
+            const ctor = MenuOptCtor[data.type] as Constructor<ContextMenuOption>;
+            data.label = label;
+            option = new ctor(data);
         }
-        if (option) this.append(option);
+        if (option) this.append(option as ContextMenuOption);
         return option;
     }
 

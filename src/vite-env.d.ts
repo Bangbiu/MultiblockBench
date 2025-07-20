@@ -13,11 +13,12 @@ type BiData<T> = [T, T];
 
 type NullableNumIterable = Nullable<Iterable<number>>;
 
-type AnyArgs = any[]
 type AnyAction = (...args: AnyArgs) => void;
+type NoArgAction = () => void;
 
 type Opt<T> = T | undefined
 type Nullable<T> = T | undefined | null
+type Tail<T extends any[]> = T extends [any, ...infer Rest] ? Rest : never;
 
 type FunctionKeyExtends<T, F> = {
     [K in keyof T]: T[K] extends F ? K : never
@@ -40,5 +41,5 @@ type AsyncFuncKeys<T> = {
 }[keyof T];
 
 interface Constructor<T> {
-  new (...args: any[]): T;
+    new (...args: any[]): T;
 }
