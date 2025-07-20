@@ -4,10 +4,12 @@ type CheckBoxCallBack = (status: boolean) => void;
 const DO_NOTHING = () => {};
 
 class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = any> extends BenchObject<TSelf> {
+    public readonly parent?: ContextMenu;
     public readonly div: HTMLDivElement;
     protected readonly caption: HTMLSpanElement;
     protected readonly box: HTMLSpanElement;
     private _action: AnyAction = DO_NOTHING;
+    private _hideParentOnAct: boolean = false;
     constructor( parameters: Partial<TSelf> = {} ) {
         super();
         const div = document.createElement("div");
@@ -48,6 +50,9 @@ class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = any> extends Be
         boxStyle.userSelect = "none";
         boxStyle.visibility = "hidden";
 
+        // Initialize
+        this.hideParent = this.hideParent.bind(this);
+        this.hideParentOnAct = parameters.hideParentOnAct ?? true;
         this.updateValues(parameters);
     }
 
@@ -65,8 +70,26 @@ class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = any> extends Be
     public get label() { return this.caption.textContent ?? ""; }
     public set label(text: string) { this.caption.textContent = text; }
 
+    public get hideParentOnAct() { return this._hideParentOnAct; }
+    public set hideParentOnAct(value: boolean) { 
+        if (value === this._hideParentOnAct) return;
+        if (value)
+            this.addEventListener("click", this.hideParent)
+        else
+            this.removeEventListener("click", this.hideParent);
+        this._hideParentOnAct = value;
+    }
+
     public addEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLDivElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | AddEventListenerOptions) {
         this.div.addEventListener(type, listener, options);
+    }
+
+    public removeEventListener<K extends keyof HTMLElementEventMap>(type: K, listener: (this: HTMLDivElement, ev: HTMLElementEventMap[K]) => any, options?: boolean | EventListenerOptions): void {
+        this.div.removeEventListener(type, listener, options);
+    }
+
+    public hideParent() {
+        this.parent?.hide();
     }
 };
 
@@ -75,7 +98,7 @@ class CheckBoxOption extends ContextMenuOption<CheckBoxOption> {
     private _checked: boolean = false;
 
     constructor( parameters: Partial<CheckBoxOption> = {} ) {
-        super();
+        super({ hideParentOnAct: false });
         // Outer box
         const boxStyle = this.box.style;
         boxStyle.border = "1px solid #ccc";
@@ -147,14 +170,18 @@ const MenuOptCtor: MenuOptType = {
 };
 
 type MenuOptTypeKey = keyof MenuOptType;
+type MenuOptParameters<K extends MenuOptTypeKey> = Partial<InstanceType<MenuOptType[K]>>
+type MenuOptAllParameters = Partial<UnionToIntersection<Union<{
+    [K in keyof MenuOptType]: InstanceType<MenuOptType[K]>;
+}>>>;
+
 type MenuOptDeclaration = {
-    [K in keyof MenuOptType]: {
+    [K in MenuOptTypeKey]: {
         type: K;
-    } & Partial<InstanceType<MenuOptType[K]>>
+    } & MenuOptParameters<K>
 }[keyof MenuOptType];
 
-type MenuOptData = MenuOptDeclaration | MenuOptTypeKey | AnyAction
-
+type MenuOptData = MenuOptDeclaration | MenuOptTypeKey | AnyAction;
 type MenuDeclaration = Record<string, MenuOptData>;
 
 class ContextMenu {
@@ -194,26 +221,29 @@ class BenchMenu extends ContextMenu {
         super();
         this.options = Array<ContextMenuOption>();
         for (const [label, data] of Object.entries(declare)) {
-            const option = this.add(label, data);
-            if (option) {
-                option.addEventListener('click', () => this.hide());
-            }
+            this.add(label, data);
         }
     }
 
     public add(label: string, data: MenuOptData): Opt<ContextMenuOption> {
         let option: Opt<ContextMenuOption> = undefined;
+        const args: MenuOptAllParameters = { parent: this, label: label };
         if (typeof data == "string") 
             // Type String Only
-            option = new MenuOptCtor[data]({ label: label });
-        else if (typeof data === "function")
+            option = new MenuOptCtor[data](args);
+        else if (typeof data === "function") {
             // Action Only
-            option = new ContextMenuOption({ label: label, action: data });
+            args.action = data;
+            if (data.length === 0)
+                option = new ContextMenuOption(args);
+            else
+                option = new CheckBoxOption(args);
+        }
         else if (typeof data === "object") {
             // Declaration
+            Object.assign(args, data);
             const ctor = MenuOptCtor[data.type] as Constructor<ContextMenuOption>;
-            data.label = label;
-            option = new ctor(data);
+            option = new ctor(args);
         }
         if (option) this.append(option as ContextMenuOption);
         return option;

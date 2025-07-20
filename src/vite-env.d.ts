@@ -40,6 +40,13 @@ type AsyncFuncKeys<T> = {
     [K in keyof T]: T[K] extends (...args: any[]) => Promise<any> ? K : never
 }[keyof T];
 
+type Union<T> = {
+    [K in keyof T]: T[K];
+}[keyof T]; // Union
+
+type UnionToIntersection<U> = 
+    (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
+
 interface Constructor<T> {
     new (...args: any[]): T;
 }

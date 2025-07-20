@@ -8,9 +8,6 @@ import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
 import { BenchOutput } from './scene/BenchOutput';
 import { BenchMenu, type MenuDeclaration } from './gui/BenchMenu';
-import type { Wireframe } from 'three/examples/jsm/Addons.js';
-
-
 // Global Var
 declare global {
   interface Window {
@@ -32,9 +29,6 @@ class App {
     // GUI
     public readonly menu: BenchMenu;
     public readonly objFileInput: HTMLInputElement;
-    public readonly wireframeCheckbox: HTMLInputElement;
-    public readonly hideMeshCheckbox: HTMLInputElement;
-    public readonly extractSelectedBtn: HTMLButtonElement;
     public readonly loadingUI: LoadingUI;
     
     constructor() {
@@ -52,9 +46,6 @@ class App {
         this.scene.add(this.output);
         // GUI
         this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
-        this.wireframeCheckbox = App.loadElement("wireframeCheckbox") as HTMLInputElement;
-        this.hideMeshCheckbox = App.loadElement("hideMeshCheckbox") as HTMLInputElement;
-        this.extractSelectedBtn = App.loadElement("extractSelectedBtn") as HTMLButtonElement;
         this.loadingUI = new LoadingUI();
         // Menu
         const menuSetting: MenuDeclaration = {
@@ -66,8 +57,8 @@ class App {
             },
             Hidden: { 
                 type: "checkBox", 
-                action: (checked) => this.model.hideMeshes = checked 
-            },
+                action: (checked) => this.model.hideMeshes = checked,
+            }
         }
         this.menu = new BenchMenu(menuSetting);
         App.INSTANCE = this;
@@ -115,24 +106,20 @@ class App {
             this.objFileInput.value = "";
         });
 
-        this.extractSelectedBtn.addEventListener("click", () => {
-            const extracted = this.model.extractSelected();
-            if (extracted) {
-                console.log(extracted);
-                
-                this.output.add(extracted);
-            }
-        });
-
         this.renderer.domElement.addEventListener('contextmenu', (event: MouseEvent) => {
             event.preventDefault();
             this.menu.show(event.clientX, event.clientY);
         });
 
-        App.connect(this.wireframeCheckbox, this.model, "showWireframe");
-        App.connect(this.hideMeshCheckbox, this.model, "hideMeshes");
-
         return this;
+    }
+
+    public extractSubMesh() {
+        const extracted = this.model.extractSelected();
+        if (extracted) {
+            console.log(extracted);
+            this.output.add(extracted);
+        }
     }
 
     public update(): void {
