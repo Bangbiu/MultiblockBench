@@ -8,7 +8,7 @@ import {
 } from "three";
 import { GeometryUtil } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
-import { EdgeLoop, type BenchSubGeometry } from "../util/SubGeometries";
+import { type BenchSubGeometry } from "../util/SubGeometries";
 
 
 class Selection extends Group {

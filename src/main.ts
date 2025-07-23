@@ -7,7 +7,7 @@ import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './bootstrap';
 import { BenchOutput } from './scene/BenchOutput';
-import { BenchMenu, type MenuDeclaration } from './gui/BenchMenu';
+import { ContextMenu, type MenuDeclaration } from './gui/BenchMenu';
 // Global Var
 declare global {
   interface Window {
@@ -27,7 +27,7 @@ class App {
     public readonly model: BenchModel;
     public readonly output: BenchOutput;
     // GUI
-    public readonly menu: BenchMenu;
+    public readonly menu: ContextMenu;
     public readonly objFileInput: HTMLInputElement;
     public readonly loadingUI: LoadingUI;
     
@@ -48,19 +48,7 @@ class App {
         this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
         this.loadingUI = new LoadingUI();
         // Menu
-        const menuSetting: MenuDeclaration = {
-            "Load Object...": this.objFileInput.click.bind(this.objFileInput),
-            Wireframe: { 
-                type: "checkBox", 
-                checked: true,
-                action: (checked) => this.model.showWireframe = checked 
-            },
-            Hidden: { 
-                type: "checkBox", 
-                action: (checked) => this.model.hideMeshes = checked,
-            }
-        }
-        this.menu = new BenchMenu(menuSetting);
+        this.menu = new ContextMenu(this.getMenuSetting()).attach();
         App.INSTANCE = this;
     }
 
@@ -77,6 +65,26 @@ class App {
         //scene.add(new DefaultBlock());
         scene.add(new BenchLighting());
         return scene;
+    }
+
+    public getMenuSetting(): MenuDeclaration {
+        return {
+            "Load Object...": this.objFileInput.click.bind(this.objFileInput),
+            Wireframe: { 
+                type: "checkBox", 
+                checked: true,
+                setter: (checked) => this.model.showWireframe = checked 
+            },
+            Hidden: { 
+                type: "checkBox", 
+                setter: (checked) => this.model.hideMeshes = checked,
+            },
+            sub: {
+                type: "subMenu",
+                menu: {
+                    idk: {type: "subMenu", menu: {idk : "checkBox"}}}
+            }
+        }
     }
 
     public registerEvents(): this {
@@ -108,7 +116,7 @@ class App {
 
         this.renderer.domElement.addEventListener('contextmenu', (event: MouseEvent) => {
             event.preventDefault();
-            this.menu.show(event.clientX, event.clientY);
+            this.menu.show().moveTo(event.clientX, event.clientY);
         });
 
         return this;
