@@ -2,6 +2,7 @@ import {
     BufferAttribute, 
     BufferGeometry, 
     Group, 
+    Line3, 
     Mesh, 
     Plane, 
     Triangle, 
@@ -36,6 +37,56 @@ type SerializedAttribute = {
 
 type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
 type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
+
+class Line3D {
+    public readonly point: Vector3;
+    public readonly direction: Vector3;
+
+    constructor(point: Vector3, direction: Vector3) {
+        this.point = point.clone();
+        this.direction = direction.clone().normalize();
+    }
+
+    /** Returns a point on the line given scalar t such that p = point + direction * t */
+    public at(t: number): Vector3 {
+        return this.direction.clone().multiplyScalar(t).add(this.point);
+    }
+
+    /** Returns the closest point on the line to the given point */
+    public closestPointTo(p: Vector3): Vector3 {
+        const toPoint = p.clone().sub(this.point);
+        const t = toPoint.dot(this.direction);
+        return this.at(t);
+    }
+
+    /** Returns true if the given point lies on the line (within epsilon tolerance) */
+    public contains(p: Vector3, epsilon = 1e-2): boolean {
+        const closest = this.closestPointTo(p);
+        return closest.distanceToSquared(p) < epsilon * epsilon;
+    }
+
+    /** Create from two distinct points (defines a line through them) */
+    public static fromPoints(p1: Vector3, p2: Vector3): Line3D {
+        return new Line3D(p1, p2.clone().sub(p1));
+    }
+
+    /** Convert to a finite line segment (Line3) between two values of t */
+    public toSegment(t0: number, t1: number): Line3 {
+        return new Line3(this.at(t0), this.at(t1));
+    }
+
+    /** Checks if another Line3D is geometrically equal to this line */
+    public equals(other: Line3D, epsilon = 1e-5): boolean {
+        // Check if directions are parallel (same or opposite)
+        const cross = this.direction.clone().cross(other.direction);
+        if (cross.lengthSq() > epsilon * epsilon) return false;
+
+        // Check if the vector connecting the base points lies on both lines
+        const diff = other.point.clone().sub(this.point);
+        return diff.cross(this.direction).lengthSq() < epsilon * epsilon;
+    }
+}
+
 
 class GeometryUtil {
 
@@ -217,6 +268,10 @@ class GeometryUtil {
                 Math.abs(basePlane.distanceToPoint(tri.b)) < COPLANAR_TOLERANCE &&
                 Math.abs(basePlane.distanceToPoint(tri.c)) < COPLANAR_TOLERANCE;
         return coplanar;
+    }
+
+    public static isColinear() {
+
     }
 
     public static extractSubMesh(srcMesh: GeometryIndexedMesh, subGeometry: BenchSubGeometry): Mesh {
@@ -417,4 +472,5 @@ export type {
 
 export {
     GeometryUtil,
+    Line3D
 }

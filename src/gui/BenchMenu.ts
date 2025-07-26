@@ -163,9 +163,11 @@ class SubMenuOption extends ContextMenuOption<SubMenuOption> {
         this.hideParentOnAct = false;
         this.setStyle();
         this.updateValues(parameters);
-        this.addEventListener("mouseenter", this.showSubMenu.bind(this));
+        this.showSubMenu = this.showSubMenu.bind(this);
+        this.scheduleHideSubMenu = this.scheduleHideSubMenu.bind(this);
+        this.addEventListener("mouseenter", this.showSubMenu);
         // Schedule hide on leave
-        this.addEventListener("mouseleave", this.scheduleHideSubMenu.bind(this));
+        this.addEventListener("mouseleave", this.scheduleHideSubMenu);
     }
 
     public get menu(): Opt<MenuDeclaration> {
@@ -176,7 +178,7 @@ class SubMenuOption extends ContextMenuOption<SubMenuOption> {
         if (this.subMenu) this.subMenu.detach();
         this.subMenu = new ContextMenu(declare).attach();
         this.subMenu.parent = this.parent;
-        this.subMenu.zIndex = this.parent? this.parent.zIndex + 1 : 1000;
+        this.subMenu.hideOnLeave = true;
     }
 
     public override setStyle(): this {
@@ -195,6 +197,7 @@ class SubMenuOption extends ContextMenuOption<SubMenuOption> {
     public showSubMenu() {
         const rect = this.div.getBoundingClientRect();
         this.subMenu?.show().moveTo(rect.right, rect.top - this.subMenu.topItemY);
+        this.subMenu?.cancelHide();
     }
 
     public hideSubMenu() {
@@ -239,17 +242,18 @@ class ContextMenu implements DivWrapper {
     public readonly options: Array<ContextMenuOption>;
     public parent?: ContextMenu;
     private _hideTimer?: number;
+    private _hideOnLeave: boolean = false;
     constructor( declare: MenuDeclaration = {} ) {
         this.div = document.createElement('div'); 
         this.setStyle();
 
+        this.scheduleHide = this.scheduleHide.bind(this);
         this.declaration = declare;
         this.options = Array<ContextMenuOption>();
         for (const [label, data] of Object.entries(declare)) {
             this.add(label, data);
         }
 
-        //this.addEventListener("mouseleave", this.scheduleHide.bind(this));
         this.addEventListener("mouseenter", this.cancelHide.bind(this));
         this.addEventListener("contextmenu", (event) => event.preventDefault());
     }
@@ -261,8 +265,17 @@ class ContextMenu implements DivWrapper {
         return childRect.top - parentRect.top;
     }
 
+    public get hideOnLeave() { return this._hideOnLeave; }
+    public set hideOnLeave(value: boolean) {
+        if (value === this._hideOnLeave) return;
+        if (value) this.addEventListener("mouseleave", this.scheduleHide);
+        else this.removeEventListener("mouseleave", this.scheduleHide);
+        this._hideOnLeave = value;
+    }
+
     public get zIndex() { return parseInt(this.div.style.zIndex); }
     public set zIndex(value: number) { this.div.style.zIndex = value.toString(); }
+    public get parentZ() { return this.parent ? this.parent.zIndex : 1000; }
 
     public attach() { document.body.appendChild(this.div); return this; }
     public detach() { document.body.removeChild(this.div); return this; }
@@ -310,7 +323,11 @@ class ContextMenu implements DivWrapper {
         return this;
     }
 
-    public show() { this.div.style.display = 'block'; return this; }
+    public show() { 
+        this.div.style.display = 'block'; 
+        this.zIndex = this.parentZ + 1;
+        return this; 
+    }
     public hide() { 
         this.div.style.display = 'none'; 
         for (const opt of this.options) {

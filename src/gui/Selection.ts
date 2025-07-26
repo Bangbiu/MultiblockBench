@@ -13,16 +13,20 @@ import { type BenchSubGeometry } from "../util/SubGeometries";
 
 class Selection extends Group {
     public readonly face: SelectedFace;
-    public readonly coplane: SelectedPlane;
+    public readonly isect: BenchIntersection;
+    public coplane?: SelectedPlane;
     public readonly benchMesh: BenchMesh;
     constructor(intersection: BenchIntersection) {
         super();
+        this.isect = intersection;
         this.benchMesh = intersection.benchMesh;
-
         this.face = new SelectedFace(intersection);
-        this.coplane = new SelectedPlane(intersection);
-
         this.add(this.face);
+    }
+
+    public createCoplane() {
+        if (this.coplane) this.remove(this.coplane);
+        this.coplane = new SelectedPlane(this.isect);
         this.add(this.coplane);
     }
 }
@@ -61,9 +65,9 @@ class SelectedPlane extends Mesh  {
             });
         const benchMesh = isect.benchMesh;
         this.subGeom = GeometryUtil.createCoplane(benchMesh.geometry, isect.faceIndex!);
-        this.geometry = this.subGeom.plainGeometry;
+        this.geometry = this.subGeom.getPlainGeometry();
         const boundary = new LineSegments(
-            GeometryUtil.createEdgeLoopGeometry(this.subGeom.edgeLoop), 
+            GeometryUtil.createEdgeLoopGeometry(this.subGeom.getEdgeLoop().optimize()), 
             new LineBasicMaterial({ color: 0xFF00FF })
         );
         boundary.renderOrder = 1;

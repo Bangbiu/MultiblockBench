@@ -79,10 +79,18 @@ class App {
                 type: "checkBox", 
                 setter: (checked) => this.model.hideMeshes = checked,
             },
-            sub: {
+            Select: {
                 type: "subMenu",
                 menu: {
-                    idk: {type: "subMenu", menu: {idk : "checkBox"}}}
+                    Coplane: () => this.model.selection?.createCoplane()
+                }
+            },
+            Extract: {
+                type: "subMenu",
+                menu: {
+                    Texture: "option",
+                    idk: {type: "subMenu", menu: {idk: "option"}}
+                }
             }
         }
     }

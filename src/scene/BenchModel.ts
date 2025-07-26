@@ -175,7 +175,7 @@ class BenchModel extends Group {
     }
 
     public extractSelected(): Opt<Mesh> {
-        if (!this.selection) return undefined;
+        if (!this.selection?.coplane) return undefined;
         return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
     }
 

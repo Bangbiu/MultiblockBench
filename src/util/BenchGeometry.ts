@@ -33,6 +33,10 @@ class IndexArray<BR extends BenchReferer> extends Array<number> {
         this.creator = creator;
     }
 
+    public get lastIndex() {
+        return this.length - 1;
+    }
+
     public fetch(): Array<BR> {
         const result = new Array<BR>();
         for (const index of this) 
@@ -93,6 +97,10 @@ class BenchVertex implements BenchReferer {
             this.parent.src!.attributes.position, 
             this.canonicIndex
         );
+    }
+
+    public to(vert: BenchVertex): Vector3 {
+        return new Vector3().subVectors(vert.pos(), this.pos());
     }
 
     public static keyOf(v: Vector3) {
