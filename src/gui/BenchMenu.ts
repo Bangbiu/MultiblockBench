@@ -3,64 +3,38 @@ import { BenchObject } from "../util/DataUtil";
 type CheckBoxCallBack = (status: boolean) => void;
 const DO_NOTHING = () => {};
 
-interface DivWrapper {
-    readonly div: HTMLDivElement;
-    setStyle(): this;
+class DivWrapper<TSelf extends DivWrapper<TSelf> = DivWrapper<any>> extends BenchObject<TSelf> {
+    public readonly div: HTMLDivElement;
+    constructor(className?: string) {
+        super();
+        this.div = create("div", className);
+    }
+    public get className() { return this.div.className; }
+    public set className(name: string) { this.div.className = name; }
+
+    public createChild<K extends keyof HTMLElementTagNameMap>(tagName: K, className?: string): HTMLElementTagNameMap[K] {
+        const child = create(tagName, className);
+        this.div.appendChild(child);
+        return child;
+    }
 }
 
-class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = ContextMenuOption<any>> extends BenchObject<TSelf> implements DivWrapper {
+class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = ContextMenuOption<any>> extends DivWrapper<TSelf> {
     public readonly parent?: ContextMenu;
-    public readonly div: HTMLDivElement;
     protected readonly caption: HTMLSpanElement;
     protected readonly box: HTMLSpanElement;
     private _action: AnyAction = DO_NOTHING;
     private _hideParentOnAct: boolean = false;
     constructor( parameters: Partial<TSelf> = {} ) {
-        super();
-        const div = document.createElement("div");
-        this.div = div;
-        
+        super("contextMenuOption");
         // Create and append caption element
-        const caption = document.createElement("span");
-        caption.style.marginRight = "12px";
-        this.caption = caption;
-        this.div.appendChild(caption);
-
-        div.style.display = "flex";
-        div.style.alignItems = "center";
-        div.style.justifyContent = "space-between";
-        div.style.padding = '6px 12px';
-        div.style.cursor = 'pointer';
-        div.style.userSelect = 'none';
-
-        div.addEventListener('mouseenter', () => {
-            div.style.background = '#444';
-        });
-        div.addEventListener('mouseleave', () => {
-            div.style.background = 'transparent';
-        });
-
-        // Right PlaceHolder
-        this.box = document.createElement("span");
-        this.div.appendChild(this.box);
-        const boxStyle = this.box.style;
-        boxStyle.display = "inline-block";
-        boxStyle.marginLeft = "auto";
-        boxStyle.width = "20px";
-        boxStyle.height = "20px";
-        boxStyle.boxSizing = "border-box";
-        boxStyle.position = "relative"; // to position inner box absolutely
-        boxStyle.userSelect = "none";
-        boxStyle.visibility = "hidden";
-
+        this.caption = this.createChild("span", "contextMenuCaption");
+        // Right Aligned PlaceHolder
+        this.box = this.createChild("span", "optionBox");
         // Initialize
         this.hideParent = this.hideParent.bind(this);
         this.hideParentOnAct = parameters.hideParentOnAct ?? true;
         this.updateValues(parameters);
-    }
-
-    setStyle(): this {
-        return this;
     }
 
     public get action() { return this._action; }
@@ -102,40 +76,20 @@ class ContextMenuOption<TSelf extends ContextMenuOption<TSelf> = ContextMenuOpti
     }
 };
 
-class CheckBoxOption extends ContextMenuOption<CheckBoxOption> {
-    private readonly innerBox: HTMLSpanElement;
+class CheckBoxOption<TSelf extends CheckBoxOption<TSelf> = CheckBoxOption<any>> extends ContextMenuOption<TSelf> {
+    protected readonly innerBox: HTMLSpanElement;
     private _checked: boolean = false;
 
-    constructor( parameters: Partial<CheckBoxOption> = {} ) {
-        super({ hideParentOnAct: false });
-        this.innerBox = document.createElement("span");
-        this.setStyle();
-        this.addEventListener("click", () => {
-            this.checked = !this.checked;
-        });
-
+    constructor( parameters: Partial<TSelf> = {} ) {
+        super();
+        this.hideParentOnAct = false;
+        this.box.classList.add("checkbox");
+        this.innerBox = create("span", "checkboxInnerBox");
+        this.box.appendChild(this.innerBox);
+        this.toggle = this.toggle.bind(this);
+        this.addEventListener("click", this.toggle);
         this.checked = false;
         this.updateValues(parameters);
-    }
-
-    public override setStyle(): this {
-        // Outer box
-        const boxStyle = this.box.style;
-        boxStyle.border = "1px solid #ccc";
-        boxStyle.visibility = "visible";
-
-        // Inner box (status indicator)
-        
-        const innerStyle = this.innerBox.style;
-        innerStyle.position = "absolute";
-        innerStyle.top = "50%";
-        innerStyle.left = "50%";
-        innerStyle.transform = "translate(-50%, -50%)";
-        innerStyle.width = "14px";
-        innerStyle.height = "14px";
-        innerStyle.background = "transparent";
-        this.box.appendChild(this.innerBox);
-        return this;
     }
 
     public get setter() { return super.action; }
@@ -151,8 +105,26 @@ class CheckBoxOption extends ContextMenuOption<CheckBoxOption> {
         this._checked = value;
         this.innerBox.style.background = value ? "#ccc" : "transparent";
     }
+
+    public toggle(): this {
+        this.checked = !this.checked;
+        return this;
+    }
 }
 
+class RadioButtonOption extends CheckBoxOption<RadioButtonOption> {
+    constructor(parameters: Partial<RadioButtonOption> = {}) {
+        super();
+        this.box.classList.add("radio");
+        this.innerBox.classList.add("radio");
+        this.updateValues(parameters);
+    }
+
+    public set checked(value: boolean) {
+        if (value) this.parent?.uncheckRadios();
+        super.checked = value;
+    }
+}
 
 class SubMenuOption extends ContextMenuOption<SubMenuOption> {
     private subMenu?: ContextMenu;
@@ -161,7 +133,9 @@ class SubMenuOption extends ContextMenuOption<SubMenuOption> {
         super();
         this.action = this.showSubMenu.bind(this);
         this.hideParentOnAct = false;
-        this.setStyle();
+        this.box.classList.add("submenu");
+        this.box.textContent = "▶";
+
         this.updateValues(parameters);
         this.showSubMenu = this.showSubMenu.bind(this);
         this.scheduleHideSubMenu = this.scheduleHideSubMenu.bind(this);
@@ -181,44 +155,28 @@ class SubMenuOption extends ContextMenuOption<SubMenuOption> {
         this.subMenu.hideOnLeave = true;
     }
 
-    public override setStyle(): this {
-        // Outer box
-        const boxStyle = this.box.style;
-        boxStyle.visibility = "visible";
-        boxStyle.marginLeft = "auto";
-        boxStyle.padding = "0 8px";
-        boxStyle.fontSize = "14px";
-        boxStyle.color = "#ccc";
-        boxStyle.pointerEvents = "none"; // don't block hover
-        this.box.textContent = "▶";
-        return this;
-    }
-
     public showSubMenu() {
         const rect = this.div.getBoundingClientRect();
         this.subMenu?.show().moveTo(rect.right, rect.top - this.subMenu.topItemY);
         this.subMenu?.cancelHide();
     }
 
-    public hideSubMenu() {
-        this.subMenu?.hide();
-    }
-    
-    public scheduleHideSubMenu() {
-        this.subMenu?.scheduleHide();
-    }
+    public hideSubMenu() { this.subMenu?.hide(); }
+    public scheduleHideSubMenu() { this.subMenu?.scheduleHide(); }
 }
 
 type MenuOptType = {
     option: typeof ContextMenuOption,
     subMenu: typeof SubMenuOption,
     checkBox: typeof CheckBoxOption,
+    radio: typeof RadioButtonOption
 };
 
 const MenuOptCtor: MenuOptType = {
     option: ContextMenuOption,
     subMenu: SubMenuOption,
     checkBox: CheckBoxOption,
+    radio: RadioButtonOption
 };
 
 type MenuOptTypeKey = keyof MenuOptType;
@@ -236,17 +194,15 @@ type MenuOptDeclaration = {
 type MenuOptData = MenuOptDeclaration | MenuOptTypeKey | AnyAction;
 type MenuDeclaration = Record<string, MenuOptData>;
 
-class ContextMenu implements DivWrapper {
-    public readonly div: HTMLDivElement;
+class ContextMenu extends DivWrapper {
     public readonly declaration: MenuDeclaration;
     public readonly options: Array<ContextMenuOption>;
     public parent?: ContextMenu;
     private _hideTimer?: number;
     private _hideOnLeave: boolean = false;
     constructor( declare: MenuDeclaration = {} ) {
-        this.div = document.createElement('div'); 
-        this.setStyle();
-
+        super()
+        this.className = "contextMenu";
         this.scheduleHide = this.scheduleHide.bind(this);
         this.declaration = declare;
         this.options = Array<ContextMenuOption>();
@@ -285,7 +241,7 @@ class ContextMenu implements DivWrapper {
         const args: MenuOptAllParameters = { parent: this, label: label };
         if (typeof data == "string") 
             // Type String Only
-            option = new MenuOptCtor[data](args);
+            option = new (MenuOptCtor[data] as Constructor<ContextMenuOption>)(args);
         else if (typeof data === "function") {
             // Action Only
             args.action = data;
@@ -307,20 +263,6 @@ class ContextMenu implements DivWrapper {
     public append(option: ContextMenuOption) {
         this.options.push(option);
         this.div.appendChild(option.div); 
-    }
-
-    public setStyle(): this {
-        const style = this.div.style;
-        style.position = 'absolute';
-        style.display = 'none';
-        style.background = '#222';
-        style.color = 'white';
-        style.padding = '5px 0';
-        style.borderRadius = '6px';
-        style.boxShadow = '0 2px 8px rgba(0,0,0,0.5)';
-        style.zIndex = '1000';
-        style.fontFamily = 'sans-serif';
-        return this;
     }
 
     public show() { 
@@ -352,6 +294,12 @@ class ContextMenu implements DivWrapper {
         this.div.removeEventListener(type, listener, options);
     }
 
+    public uncheckRadios() {
+        this.options.forEach(option => {
+            if (option instanceof RadioButtonOption) option.checked = false;
+        });
+    }
+
     public scheduleHide() {
         this._hideTimer = window.setTimeout(() => this.hide(), 50);
     }
@@ -365,6 +313,11 @@ class ContextMenu implements DivWrapper {
     }
 }
 
+function create<K extends keyof HTMLElementTagNameMap>(tagName: K, className?: string): HTMLElementTagNameMap[K] {
+    const element = document.createElement(tagName);
+    if (className) element.className = className;
+    return element;
+}
 
 export type {
     MenuDeclaration

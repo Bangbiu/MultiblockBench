@@ -99,7 +99,7 @@ class BenchModel extends Group {
         this.fromGroup(group);
     }
 
-    public select(raycaster: Raycaster): this {
+    public selectWith(raycaster: Raycaster): this {
         const intersection = this.getClosestIntersection(raycaster);
         if (intersection) {
             if (this.selection) this.remove(this.selection);

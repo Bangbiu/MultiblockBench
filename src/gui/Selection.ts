@@ -4,7 +4,9 @@ import {
     LineBasicMaterial, 
     LineSegments, 
     Mesh, 
-    MeshBasicMaterial,  
+    MeshBasicMaterial,
+    Points,
+    PointsMaterial,  
 } from "three";
 import { GeometryUtil } from "../util/GeometryUtil";
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
@@ -66,12 +68,24 @@ class SelectedPlane extends Mesh  {
         const benchMesh = isect.benchMesh;
         this.subGeom = GeometryUtil.createCoplane(benchMesh.geometry, isect.faceIndex!);
         this.geometry = this.subGeom.getPlainGeometry();
+        const edgeLoop = this.subGeom.getEdgeLoop().optimize();
         const boundary = new LineSegments(
-            GeometryUtil.createEdgeLoopGeometry(this.subGeom.getEdgeLoop().optimize()), 
+            GeometryUtil.createEdgeLoopGeometry(edgeLoop), 
             new LineBasicMaterial({ color: 0xFF00FF })
         );
         boundary.renderOrder = 1;
+
+        const vertMesh = new Points(
+            GeometryUtil.createVerticesGeometry(edgeLoop),
+            new PointsMaterial({
+                color: 0xff44aa,
+                size: 0.2,
+                sizeAttenuation: true,
+            })
+        );
+        vertMesh.renderOrder = 1;
         this.add(boundary);
+        this.add(vertMesh);
         this.visible = true;
     }
 

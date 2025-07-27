@@ -29,7 +29,7 @@ canvas {
 #menu button {
   display: block;
   width: 100%;
-  aspect-ratio: 1 / 1; /* Makes height = width */
+  aspect-ratio: 1 / 1; 
   margin-bottom: 20px;
   font-size: 24px;
   background-color: #1e90ff;
@@ -47,8 +47,6 @@ canvas {
 #menu button[data-checked="true"] {
   background-color: #ff8c00; /* Example checked color */
 }
-
-
 
 #menu .toggle {
   display: block;
@@ -84,43 +82,8 @@ canvas {
   background-color: #ff8c00;
 }
 
-
-
-
 #objLoader {
   display: none;
-}
-
-#toolBar {
-  position: absolute;
-  top: 0;
-  right: 0;
-  width: 80px;
-  height: 100vh;
-  background-color: rgba(0, 0, 0, 0.7);
-  color: white;
-  padding: 15px;
-  box-sizing: border-box;
-  font-family: sans-serif;
-  z-index: 10;
-}
-
-#toolBar button {
-  display: block;
-  width: 100%;
-  aspect-ratio: 1 / 1; /* Makes height = width */
-  margin-bottom: 20px;
-  font-size: 24px;
-  background-color: #1e90ff;
-  border: none;
-  color: white;
-  cursor: pointer;
-  border-radius: 4px;
-  padding: 0; /* Remove padding to maintain square shape */
-}
-
-#toolBar button:hover {
-  background-color: #3399ff;
 }
 
 #loadingOverlay {
@@ -186,12 +149,77 @@ canvas {
 }
 
 .contextMenu {
-    display: none;
-    position: absolute;
-    background: #333;
-    color: white;
-    padding: 5px 10px;
-    border-radius: 4px;
-    font-family: sans-serif;
+    position : absolute;
+    display : none;
+    background : #222;
+    color : white;
+    padding : 5px 0;
+    border-radius : 6px;
+    box-shadow : 0 2px 8px rgba(0,0,0,0.5);
     z-index: 1000;
+    font-family : sans-serif;
 }
+
+.contextMenuOption {
+    display : flex;
+    align-items : center;
+    justify-content : space-between;
+    padding : 6px 12px;
+    cursor : pointer;
+    user-select : none;
+    background: transparent;
+    transition: background 0.2s ease;
+}
+
+.contextMenuOption:hover {
+    background: #444;
+}
+
+.contextMenuCaption {
+    margin-right: 12px;
+}
+
+.optionBox {
+    display : inline-block;
+    margin-left : auto;
+    width : 20px;
+    height : 20px;
+    box-sizing : border-box;
+    position : relative;
+    user-select : none;
+    visibility : hidden;
+}
+
+.checkbox.optionBox {
+    border : 1px solid #ccc;
+    visibility : visible;
+}
+
+.radio.checkbox.optionBox {
+    border-radius: 50%;
+}
+
+.submenu.optionBox {
+    visibility : visible;
+    margin-left : auto;
+    padding : 0 8px;
+    font-size : 14px;
+    color : #ccc;
+    pointer-events : none;
+}
+
+.checkboxInnerBox {
+    position : absolute;
+    top : 50%;
+    left : 50%;
+    transform : translate(-50%, -50%);
+    width : 14px;
+    height : 14px;
+    background : transparent;
+}
+
+.radio.checkboxInnerBox {
+    border-radius: 50%;
+}
+
+

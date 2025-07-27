@@ -122,7 +122,6 @@ class EdgeLoop extends IndexArray<BenchVertex> {
     public optimize(): this {
         const optimized = new Array<number>();
         if (this.length < 4) return this;
-        console.log(this.length);
         const head = this.chain();
         // Consider Element 0 is at the middle of the line - Find the Next Starting
         let forwardLine = Line3D.fromPoints(head.pos(), head.next.pos());
@@ -142,7 +141,8 @@ class EdgeLoop extends IndexArray<BenchVertex> {
             if (optimized.length >= this.length) return this;
         } while (node !== start);
         
-
+        console.log(this.length + "->" + optimized.length);
+        
         // Replace the current content with optimized version
         this.length = 0;
         this.push(...optimized);

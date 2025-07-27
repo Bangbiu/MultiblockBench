@@ -24,7 +24,14 @@ type VertexData = {
     edges: Set<number>
 }
 
-class IndexArray<BR extends BenchReferer> extends Array<number> {
+interface IndexIterable<BR extends BenchReferer> {
+    readonly parent: BenchGeometry;
+    readonly creator: BenchRefererCtor<BR>;
+    get size(): number;
+    fetch(): Iterable<BR>;
+}
+
+class IndexArray<BR extends BenchReferer> extends Array<number> implements IndexIterable<BR> {
     public readonly parent: BenchGeometry;
     public readonly creator: BenchRefererCtor<BR>;
     constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
@@ -37,6 +44,10 @@ class IndexArray<BR extends BenchReferer> extends Array<number> {
         return this.length - 1;
     }
 
+    public get size() {
+        return this.length;
+    }
+
     public fetch(): Array<BR> {
         const result = new Array<BR>();
         for (const index of this) 
@@ -45,7 +56,7 @@ class IndexArray<BR extends BenchReferer> extends Array<number> {
     }
 }
 
-class IndexSet<BR extends BenchReferer> extends Set<number> {
+class IndexSet<BR extends BenchReferer> extends Set<number> implements IndexIterable<BR> {
     public readonly parent: BenchGeometry;
     public readonly creator: BenchRefererCtor<BR>;
     constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
@@ -101,6 +112,10 @@ class BenchVertex implements BenchReferer {
 
     public to(vert: BenchVertex): Vector3 {
         return new Vector3().subVectors(vert.pos(), this.pos());
+    }
+
+    public geometry() {
+        return GeometryUtil.createPointGeometry(this.pos());
     }
 
     public static keyOf(v: Vector3) {
@@ -466,6 +481,10 @@ class BenchGeometry {
         if (!this.src) throw new Error("Need Source Geometry");
     }
 
+}
+
+export type {
+    IndexIterable
 }
 
 export {

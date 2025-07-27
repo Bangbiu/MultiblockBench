@@ -89,7 +89,9 @@ class App {
                 type: "subMenu",
                 menu: {
                     Texture: "option",
-                    idk: {type: "subMenu", menu: {idk: "option"}}
+                    idk: {type: "subMenu", menu: {idk: "option"}},
+                    radio1: "radio",
+                    radio2: "radio"
                 }
             }
         }
@@ -105,7 +107,7 @@ class App {
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
             this.raycaster.setFromCamera(this.mouse, this.camera);
-            this.model.select(this.raycaster);
+            this.model.selectWith(this.raycaster);
         });
 
         // KeyBoard

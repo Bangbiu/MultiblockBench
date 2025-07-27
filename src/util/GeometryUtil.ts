@@ -12,7 +12,7 @@ import {
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import { BenchEdge, type BenchGeometry, type IndexSet } from "./BenchGeometry";
+import { BenchEdge, BenchVertex, type BenchGeometry, type IndexIterable } from "./BenchGeometry";
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
@@ -168,6 +168,27 @@ class GeometryUtil {
         return geometry as IndexedBufferGeometry;
     }
 
+    public static createPointGeometry(pos: Vector3): BufferGeometry {
+        const geometry = new BufferGeometry();
+        const positions = new Float32Array(3);
+        positions.set([pos.x, pos.y, pos.z], 0);
+        geometry.setAttribute('position', new BufferAttribute(positions, 3));
+        return geometry;
+    }
+
+    public static createVerticesGeometry(verts: IndexIterable<BenchVertex>) {
+        const geometry = new BufferGeometry();
+        const positions = new Float32Array(verts.size * 3);
+        let index = 0;
+        for (const vert of verts.fetch()) {
+            positions.set(vert.pos().toArray(), index * 3);
+            index++;
+        }
+
+        geometry.setAttribute('position', new BufferAttribute(positions, 3));
+        return geometry;
+    }
+
     public static createIndexedGeometry(geometry: BufferGeometry): IndexedBufferGeometry {
         return mergeVertices(geometry) as IndexedBufferGeometry;
     }
@@ -224,7 +245,7 @@ class GeometryUtil {
         return result;
     }
 
-    public static createEdgesGeometry(edges: IndexSet<BenchEdge>): IndexedBufferGeometry {
+    public static createEdgesGeometry(edges: IndexIterable<BenchEdge>): IndexedBufferGeometry {
         const positions = new Float32Array(edges.size * 2 * 3);
         let pointer = 0;
         for (const edge of edges.fetch()) {
@@ -268,10 +289,6 @@ class GeometryUtil {
                 Math.abs(basePlane.distanceToPoint(tri.b)) < COPLANAR_TOLERANCE &&
                 Math.abs(basePlane.distanceToPoint(tri.c)) < COPLANAR_TOLERANCE;
         return coplanar;
-    }
-
-    public static isColinear() {
-
     }
 
     public static extractSubMesh(srcMesh: GeometryIndexedMesh, subGeometry: BenchSubGeometry): Mesh {
