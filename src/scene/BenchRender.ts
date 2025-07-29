@@ -1,6 +1,7 @@
 import { 
     PerspectiveCamera, 
     Scene, 
+    Triangle, 
     Vector2, 
     Vector3, 
     WebGLRenderer 
@@ -70,6 +71,15 @@ class ModelOrbitalControl extends OrbitControls {
         this.enableDamping = true;
         this.dampingFactor = 0.05;
         this.target.set(0, 0, 0); // rotate around the origin
+    }
+
+    public focusOn(tri: Triangle) {
+        const midpoint = new Vector3();
+        const normal = new Vector3();
+        tri.getMidpoint(midpoint);
+        tri.getNormal(normal);
+
+        
     }
 }
 

@@ -70,19 +70,24 @@ class App {
     public getMenuSetting(): MenuDeclaration {
         return {
             "Load Object...": this.objFileInput.click.bind(this.objFileInput),
-            Wireframe: { 
-                type: "checkBox", 
-                checked: true,
-                setter: (checked) => this.model.showWireframe = checked 
-            },
-            Hidden: { 
-                type: "checkBox", 
-                setter: (checked) => this.model.hideMeshes = checked,
+            Display: {
+                type: "subMenu",
+                menu: {
+                    Wireframe: { 
+                        type: "checkBox", 
+                        checked: true,
+                        setter: (checked) => this.model.showWireframe = checked 
+                    },
+                    Hidden: { 
+                        type: "checkBox", 
+                        setter: (checked) => this.model.hideMeshes = checked,
+                    }
+                }
             },
             Select: {
                 type: "subMenu",
                 menu: {
-                    Coplane: () => this.model.selection?.createCoplane()
+                    Coplane: this.model.selection.selectCoplane
                 }
             },
             Extract: {
@@ -141,7 +146,8 @@ class App {
     }
 
     public update(): void {
-        this.renderer.outlinePass.selectedObjects = this.model.selection ? [this.model.selection.benchMesh] : [];
+        // Outline Post Effect
+        this.renderer.outlinePass.selectedObjects = [];
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
         this.orbitalControl.update();

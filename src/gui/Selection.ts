@@ -9,73 +9,46 @@ import {
     PointsMaterial,  
 } from "three";
 import { GeometryUtil } from "../util/GeometryUtil";
-import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
-import { type BenchSubGeometry } from "../util/SubGeometries";
+import { BenchSubGeometry } from "../util/SubGeometries";
+import type { BenchIntersection } from "../scene/BenchModel";
 
 
 class Selection extends Group {
-    public readonly face: SelectedFace;
-    public readonly isect: BenchIntersection;
-    public coplane?: SelectedPlane;
-    public readonly benchMesh: BenchMesh;
-    constructor(intersection: BenchIntersection) {
+    public subGeometry?: BenchSubGeometry;
+    public index?: number;
+    public faces?: Mesh;
+    public edges?: LineSegments;
+    public verts?: Points;
+    constructor() {
         super();
-        this.isect = intersection;
-        this.benchMesh = intersection.benchMesh;
-        this.face = new SelectedFace(intersection);
-        this.add(this.face);
+        this.renderOrder = 1;
+        this.selectCoplane = this.selectCoplane.bind(this);
     }
 
-    public createCoplane() {
-        if (this.coplane) this.remove(this.coplane);
-        this.coplane = new SelectedPlane(this.isect);
-        this.add(this.coplane);
-    }
-}
+    public get available() { return this.subGeometry !== undefined; }
 
-class SelectedFace extends Mesh {
-    constructor(isect: BenchIntersection) {
-        super();
+    public setFacesMesh() {
+        if (this.subGeometry === undefined) return;
         const [ color, opacity ] = window.config.selection.faceColor;
-        this.material = new MeshBasicMaterial({
+        const material = new MeshBasicMaterial({
                 color: color, 
                 side: DoubleSide,
                 transparent: true,
                 opacity: opacity
             });
-        const benchMesh = isect.benchMesh;
-        if (isect.faceIndex) {
-            // Create triangle geometry
-            // this.geometry = benchMesh.faceGeometryAt(isect.faceIndex); 
-            this.geometry = benchMesh.geometry.faceGeometryAt(isect.faceIndex);
-        }
-
-        this.visible = true;
+        const geometry = this.subGeometry.getPlainGeometry();
+        this.faces = new Mesh(geometry, material);
+        this.add(this.faces);
     }
-}
 
-class SelectedPlane extends Mesh  {
-    public subGeom: BenchSubGeometry;
-    constructor(isect: BenchIntersection) {
-        const [ color, opacity ] = window.config.selection.coplaneColor;
-        super();
-        this.material = new MeshBasicMaterial({
-                color: color, 
-                side: DoubleSide,
-                transparent: true,
-                opacity: opacity
-            });
-        const benchMesh = isect.benchMesh;
-        this.subGeom = GeometryUtil.createCoplane(benchMesh.geometry, isect.faceIndex!);
-        this.geometry = this.subGeom.getPlainGeometry();
-        const edgeLoop = this.subGeom.getEdgeLoop().optimize();
-        const boundary = new LineSegments(
+    public setVertsMesh() {
+        if (this.subGeometry === undefined) return;
+        const edgeLoop = this.subGeometry.getEdgeLoop();
+        this.edges = new LineSegments(
             GeometryUtil.createEdgeLoopGeometry(edgeLoop), 
             new LineBasicMaterial({ color: 0xFF00FF })
         );
-        boundary.renderOrder = 1;
-
-        const vertMesh = new Points(
+        this.verts = new Points(
             GeometryUtil.createVerticesGeometry(edgeLoop),
             new PointsMaterial({
                 color: 0xff44aa,
@@ -83,12 +56,34 @@ class SelectedPlane extends Mesh  {
                 sizeAttenuation: true,
             })
         );
-        vertMesh.renderOrder = 1;
-        this.add(boundary);
-        this.add(vertMesh);
-        this.visible = true;
+        this.add(this.edges);
+        this.add(this.verts);
     }
 
+    public refresh() {
+        this.clear();
+        this.setFacesMesh();
+        this.setVertsMesh();
+    }
+
+    public selectByIsect(isect: BenchIntersection) {
+        this.subGeometry = new BenchSubGeometry(isect.benchMesh.geometry);
+        this.subGeometry.add(isect.faceIndex);
+        this.index = isect.faceIndex;
+        this.refresh();
+    }
+
+    public selectCoplane() {
+        if (!this.available) return;
+        const subGeom = this.subGeometry!;
+        subGeom.clear();
+        GeometryUtil.createCoplane(
+            subGeom.parent,
+            this.index!,
+            subGeom
+        );
+        this.refresh();
+    }
 }
 
 export {

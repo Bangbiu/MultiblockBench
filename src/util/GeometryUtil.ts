@@ -214,11 +214,11 @@ class GeometryUtil {
         return geom as IndexedBufferGeometry;
     }
 
-    public static createCoplane(benchGeom: BenchGeometry, baseIndex: number): BenchSubGeometry {
+    public static createCoplane(benchGeom: BenchGeometry, baseIndex: number, subGeom?: BenchSubGeometry): BenchSubGeometry {
         const basePlane = benchGeom.planeAt(baseIndex);
         const visited = new Set<number>();
         const toVisit = [baseIndex];
-        const result = new BenchSubGeometry(benchGeom);
+        const result = subGeom ?? new BenchSubGeometry(benchGeom);
 
         while (toVisit.length > 0) {
             const curIndex = toVisit.pop()!;

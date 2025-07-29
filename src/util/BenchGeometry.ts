@@ -259,11 +259,9 @@ class BenchFace implements BenchReferer {
     }
 
     public tri(): Triangle {
-        const position = this.parent.src!.attributes.position as BufferAttribute;
-        const vA = new Vector3().fromBufferAttribute(position, this.a);
-        const vB = new Vector3().fromBufferAttribute(position, this.b);
-        const vC = new Vector3().fromBufferAttribute(position, this.c);
-        return new Triangle(vA, vB, vC);
+        return new Triangle().setFromAttributeAndIndices(
+            this.parent.src!.attributes.position, this.a, this.b, this.c
+        );
     }
 
     public geometry(): IndexedBufferGeometry {

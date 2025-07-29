@@ -27,7 +27,7 @@ type BenchIntersection = {
 }
 
 class BenchModel extends Group {
-    public selection?: Selection;
+    public selection: Selection;
     public benchMeshes: Set<BenchMesh>;
     private _showWireframe: boolean = true;
     private _hideMeshes: boolean = false;
@@ -35,6 +35,7 @@ class BenchModel extends Group {
     constructor() {
         super();
         this.benchMeshes = new Set();
+        this.selection = new Selection();
         this.scale.copy(BenchModel.BENCH_SCALE);
     }
 
@@ -60,6 +61,11 @@ class BenchModel extends Group {
         return this;
     }
 
+    public clearBench() {
+        this.clear();
+        this.add(this.selection);
+    }
+
     public remove(...objs: Array<Object3D>): this {
         super.remove(...objs);
         objs.forEach(obj => {
@@ -71,7 +77,7 @@ class BenchModel extends Group {
     }
 
     public async load(fileList: ArrangedFiles, loadingUI: LoadingUI) {
-        this.clear();
+        this.clearBench();
         loadingUI.onStart();
         await loadingUI.startProcess("Loading Bench Model")
         .then("Obj File", 
@@ -87,7 +93,6 @@ class BenchModel extends Group {
     }
 
     public fromGroup(group: Group) {
-        this.clear();
         for (const obj of group.children) {
             if ((obj as Mesh).isMesh) 
                 this.add(new BenchMesh(obj.clone() as Mesh));
@@ -102,9 +107,7 @@ class BenchModel extends Group {
     public selectWith(raycaster: Raycaster): this {
         const intersection = this.getClosestIntersection(raycaster);
         if (intersection) {
-            if (this.selection) this.remove(this.selection);
-            this.selection = new Selection(intersection);
-            this.add(this.selection);
+            this.selection.selectByIsect(intersection);
         }
         return this;
     }
@@ -175,8 +178,8 @@ class BenchModel extends Group {
     }
 
     public extractSelected(): Opt<Mesh> {
-        if (!this.selection?.coplane) return undefined;
-        return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
+        return undefined;
+        //return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
     }
 
     public static readonly BENCH_SCALE = new Vector3(16, 16, 16);

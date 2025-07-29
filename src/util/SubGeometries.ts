@@ -37,7 +37,6 @@ class BenchSubGeometry extends IndexSet<BenchFace> {
     public getEdgeLoop(): EdgeLoop {
         return new EdgeLoop(this.getBounds());
     }
-
 }
 
 class VertexNode extends BenchVertex {
