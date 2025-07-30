@@ -5,15 +5,11 @@ import { BenchModel } from './scene/BenchModel';
 import { Color, Raycaster, Scene, Vector2 } from 'three';
 import { FileUtil } from './util/FileUtil';
 import { LoadingUI } from './gui/Loading';
-import { bootstrap } from './bootstrap';
+import { bootstrap } from './config';
 import { BenchOutput } from './scene/BenchOutput';
 import { ContextMenu, type MenuDeclaration } from './gui/BenchMenu';
-// Global Var
-declare global {
-  interface Window {
-    app: App;
-  }
-}
+
+bootstrap();
 
 class App {
     // Render
@@ -169,6 +165,13 @@ class App {
     public static INSTANCE?: App;
 }
 
+// Global Var
+declare global {
+  interface Window {
+    app: App;
+  }
+}
+
 function main() {
     const app = new App();
     app.init();
@@ -177,8 +180,7 @@ function main() {
         app.update();
         requestAnimationFrame(loop);
     }
-
     loop();
 }
 
-bootstrap().then(main);
+main();

@@ -1,13 +1,19 @@
 import { 
     AxesHelper, 
     BoxGeometry, 
+    CatmullRomCurve3, 
     DoubleSide, 
+    ExtrudeGeometry, 
     GridHelper, 
     Group, 
     Mesh, 
     MeshBasicMaterial, 
     MeshStandardMaterial, 
-    PlaneGeometry 
+    PlaneGeometry, 
+    Shape, 
+    TubeGeometry, 
+    Vector2, 
+    Vector3
 } from "three";
 
 
@@ -16,9 +22,9 @@ class BenchGrid extends Group {
         super();
         const config = window.config.grid;
         // Grid helper on the XZ plane 1m per block segment
-        this.add(new GridHelper(160, 160, config.unitColor, config.unitColor));
+        this.add(new GridHelper(160, 160, config.unit_color, config.unit_color));
         // Grid helper on the XZ plane 16m per block
-        this.add(new GridHelper(160, 10, config.blockColor, config.blockColor));
+        this.add(new GridHelper(160, 10, config.block_color, config.block_color));
         
         // Axes helper to visualize X, Y, Z
         this.add(new AxesHelper(80));
@@ -27,12 +33,7 @@ class BenchGrid extends Group {
 
         const plane = new Mesh(
             new PlaneGeometry(planeSize, planeSize),
-            new MeshBasicMaterial({
-                color: config.originPlaneColor[0],
-                transparent: true,
-                opacity: config.originPlaneColor[1],         // make it faint
-                side: DoubleSide
-            })
+            config.origin_plane_mat
         );
 
         // On Block 0,0,0

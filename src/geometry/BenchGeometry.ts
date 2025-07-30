@@ -1,22 +1,36 @@
 import {
-  BufferAttribute,
-  Plane,
-  Triangle,
-  Vector3,
-  type TypedArray
+    BufferAttribute,
+    BufferGeometry,
+    LineSegments,
+    Mesh,
+    Object3D,
+    Plane,
+    Points,
+    Triangle,
+    Vector3,
+    type TypedArray
 } from 'three';
 import { GeometryUtil, type IndexedBufferGeometry } from './GeometryUtil';
+import { Primitives } from './Primitives';
+
 
 type EdgeTuple = [number, number, number, number]; // [v1, v2, f1, f2]
 
-interface BenchReferer {
+interface Object3DProvider {
+    geometry(): BufferGeometry;
+    createObject3D(): Object3D;
+}
+
+interface BenchReferer extends Object3DProvider {
     readonly parent: BenchGeometry
     readonly index: number;    // Starting Index of SubArray
     readonly data: TypedArray; // SubArray of Parent Data Array
 }
 
 interface BenchRefererCtor<BR extends BenchReferer> {
-  new (parent: BenchGeometry, index: number): BR;
+    new (parent: BenchGeometry, index: number): BR;
+    mergeGeometries(brs: IndexIterable<BR>): BufferGeometry;
+    mergeObject3D(brs: IndexIterable<BR>): Object3D;
 }
 
 type VertexData = {
@@ -24,14 +38,18 @@ type VertexData = {
     edges: Set<number>
 }
 
-interface IndexIterable<BR extends BenchReferer> {
+interface IndexIterable<BR extends BenchReferer> extends Iterable<number> {
     readonly parent: BenchGeometry;
     readonly creator: BenchRefererCtor<BR>;
     get size(): number;
     fetch(): Iterable<BR>;
 }
 
-class IndexArray<BR extends BenchReferer> extends Array<number> implements IndexIterable<BR> {
+// abstract class IndexCollection<BR extends BenchReferer> implements IndexIterable<BR> {
+
+// }
+
+class IndexArray<BR extends BenchReferer> extends Array<number> implements IndexIterable<BR>, Object3DProvider {
     public readonly parent: BenchGeometry;
     public readonly creator: BenchRefererCtor<BR>;
     constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
@@ -54,9 +72,13 @@ class IndexArray<BR extends BenchReferer> extends Array<number> implements Index
             result.push(new this.creator(this.parent, index));
         return result;
     }
+
+    public geometry() { return this.creator.mergeGeometries(this); }
+
+    public createObject3D(): Object3D { return this.creator.mergeObject3D(this);}
 }
 
-class IndexSet<BR extends BenchReferer> extends Set<number> implements IndexIterable<BR> {
+class IndexSet<BR extends BenchReferer> extends Set<number> implements IndexIterable<BR>, Object3DProvider {
     public readonly parent: BenchGeometry;
     public readonly creator: BenchRefererCtor<BR>;
     constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
@@ -71,9 +93,15 @@ class IndexSet<BR extends BenchReferer> extends Set<number> implements IndexIter
             result.add(new this.creator(this.parent, index));
         return result;
     }
+
+    public geometry() {
+        return this.creator.mergeGeometries(this);
+    }
+
+    public createObject3D(): Object3D {
+        return this.creator.mergeObject3D(this);
+    }
 }
-
-
 
 /**
  * Bench Vertex
@@ -115,7 +143,11 @@ class BenchVertex implements BenchReferer {
     }
 
     public geometry() {
-        return GeometryUtil.createPointGeometry(this.pos());
+        return Primitives.point(this.pos());
+    }
+
+    public createObject3D(): Points {
+        return new Points(this.geometry(), window.config.referer.vert_mat);
     }
 
     public static keyOf(v: Vector3) {
@@ -124,6 +156,14 @@ class BenchVertex implements BenchReferer {
 
     public static key(x: number, y: number, z: number) {
         return `${x.toFixed(5)}_${y.toFixed(5)}_${z.toFixed(5)}`;
+    }
+
+    public static readonly mergeGeometries = Primitives.verts;
+    public static mergeObject3D(verts: IndexIterable<BenchVertex>): Points {
+        return new Points(
+            BenchVertex.mergeGeometries(verts), 
+            window.config.referer.vert_mat
+        );
     }
 
     public static readonly META_SIZE = 3;
@@ -141,7 +181,7 @@ class BenchVertex implements BenchReferer {
  * 
  */
 
-class BenchEdge implements BenchReferer{
+class BenchEdge implements BenchReferer {
     public readonly parent: BenchGeometry;
     public readonly index: number;
     public readonly data: TypedArray;
@@ -189,6 +229,18 @@ class BenchEdge implements BenchReferer{
         return other.a == this.a && other.b == this.b;
     }
 
+    public geometry(){
+        const [v1, v2] = this.verts();
+        return Primitives.line(v1.pos(), v2.pos())
+    }
+
+    public createObject3D(): LineSegments {
+        return new LineSegments(
+            this.geometry(), 
+            window.config.referer.edge_mat
+        );
+    }
+
     /** Normalized key, for hashing */
     static key(a: number, b: number): string {
         return a < b ? `${a}|${b}` : `${b}|${a}`;
@@ -196,6 +248,14 @@ class BenchEdge implements BenchReferer{
 
     get key(): string {
         return BenchEdge.key(this.a, this.b);
+    }
+
+    public static readonly mergeGeometries = Primitives.edges;
+    public static mergeObject3D(edges: IndexIterable<BenchEdge>): LineSegments {
+        return new LineSegments(
+            BenchEdge.mergeGeometries(edges), 
+            window.config.referer.edge_mat
+        );
     }
 
     public static readonly DATA_SIZE = 4;
@@ -265,7 +325,13 @@ class BenchFace implements BenchReferer {
     }
 
     public geometry(): IndexedBufferGeometry {
-        return GeometryUtil.createTriangleGeometry(this.tri());
+        return Primitives.tri(this.tri());
+    }
+
+    public createObject3D(): Object3D {
+        return new Mesh(
+            this.geometry(), window.config.referer.face_mat
+        );
     }
 
     public edges(): TriData<BenchEdge> {
@@ -274,6 +340,14 @@ class BenchFace implements BenchReferer {
             this.parent.edgeAt(this.data[4]),
             this.parent.edgeAt(this.data[5])
         ];
+    }
+
+    public static readonly mergeGeometries = Primitives.faces;
+    public static mergeObject3D(faces: IndexIterable<BenchFace>) {
+        return new Mesh(
+            BenchFace.mergeGeometries(faces), 
+            window.config.referer.face_mat
+        );
     }
 
     public static readonly DATA_SIZE = 9;
@@ -445,8 +519,7 @@ class BenchGeometry {
     }
 
     public planeAt(index: number): Plane {
-        const tri = this.triAt(index);
-        return new Plane().setFromCoplanarPoints(tri.a, tri.b, tri.c);
+        return this.triAt(index).getPlane(new Plane());
     }
 
     public neighborsOf(index: number): Set<number> {

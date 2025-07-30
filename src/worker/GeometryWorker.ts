@@ -1,4 +1,4 @@
-import { GeometryUtil, type GeometryRunnableFunctions } from "../util/GeometryUtil";
+import { GeometryUtil, type GeometryRunnableFunctions } from "../geometry/GeometryUtil";
 
 self.onmessage = (e: MessageEvent<{ fn: GeometryRunnableFunctions; payload: any[] }>) => {
     const { fn, payload } = e.data;

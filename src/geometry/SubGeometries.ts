@@ -1,3 +1,4 @@
+import { BufferGeometry, Group, LineSegments, Mesh,  Plane, Points } from "three";
 import { 
     BenchEdge, 
     BenchFace, 
@@ -11,15 +12,26 @@ import {
     GeometryUtil,
     Line3D,
 } from "./GeometryUtil";
+import { Primitives } from "./Primitives";
 
+class ReferMesh extends Mesh {
+    public readonly boundary: LineSegments;
+    public readonly verts: Points;
+    constructor() {
+        super();
+        this.boundary = new LineSegments();
+        this.boundary.material = window.config.referer.edge_mat;
+        this.add(this.boundary);
+
+        this.verts = new Points();
+        this.verts.material = window.config.referer.vert_mat;
+        this.add(this.verts);
+    }
+}
 
 class BenchSubGeometry extends IndexSet<BenchFace> {
     constructor(parent: BenchGeometry, faceIndices?: NullableNumIterable) {
         super(parent, BenchFace, faceIndices);
-    }
-
-    public getPlainGeometry() {
-        return GeometryUtil.createPlainGeometry(this);
     }
 
     public getBounds(): IndexSet<BenchEdge> {
@@ -37,20 +49,40 @@ class BenchSubGeometry extends IndexSet<BenchFace> {
     public getEdgeLoop(): EdgeLoop {
         return new EdgeLoop(this.getBounds());
     }
+
+    
+    public override geometry() {
+        return GeometryUtil.createPlainGeometry(this);
+    }
+
+
+    public override createObject3D(): ReferMesh {
+        const mesh = new ReferMesh();
+        const edgeLoop = this.getEdgeLoop().optimize();
+        mesh.boundary.geometry = GeometryUtil.createEdgeLoopGeometry(edgeLoop);
+        mesh.verts.geometry = edgeLoop.geometry();
+        return mesh;
+    }
+
 }
 
 class VertexNode extends BenchVertex {
+    private _prev!: VertexNode;
     private _next!: VertexNode;
-    constructor(parent: BenchGeometry, index: number, next?: VertexNode) {
+    constructor(parent: BenchGeometry, index: number) {
         super(parent, index);
-        if (next) this._next = next;
     }
 
+    public get prev() { return this._prev; }
     public get next() { return this._next; }
 
     public static readonly Setter = class {
         static setNext(node: VertexNode, next: VertexNode) {
             node._next = next;
+        }
+
+        static setPrev(node: VertexNode, prev: VertexNode) {
+            node._prev = prev;
         }
     }
 }
@@ -107,12 +139,14 @@ class EdgeLoop extends IndexArray<BenchVertex> {
 
     public chain(): VertexNode {
         const chainArr = new Array<VertexNode>();
-        for (let i = 0; i < this.lastIndex - 1; i++) {
+        for (let i = 0; i < this.lastIndex; i++) {
             chainArr.push(new VertexNode(this.parent, this[i]));
         }
 
         chainArr.forEach((node, index) => {
+            const prevIndex = index === 0 ? chainArr.length - 1 : index - 1;
             const nextIndex = index === chainArr.length - 1 ? 0 : index + 1;
+            VertexNode.Setter.setPrev(node, chainArr[prevIndex]);
             VertexNode.Setter.setNext(node, chainArr[nextIndex]);
         })
         return chainArr[0];
@@ -122,26 +156,24 @@ class EdgeLoop extends IndexArray<BenchVertex> {
         const optimized = new Array<number>();
         if (this.length < 4) return this;
         const head = this.chain();
-        // Consider Element 0 is at the middle of the line - Find the Next Starting
-        let forwardLine = Line3D.fromPoints(head.pos(), head.next.pos());
-        const start = EdgeLoop.findNextEndPoint(forwardLine, head.next);
-        
-        if (!start) return this;
-        
-        optimized.push(head.index);
-        optimized.push(start.index);
-        let node = start;
+        let node = head;
+
         do {
-            forwardLine = Line3D.fromPoints(node.pos(), node.next.pos());
-            const endPoint = EdgeLoop.findNextEndPoint(forwardLine, node.next);
-            if (!endPoint) return this;
-            node = endPoint;
-            optimized.push(node.index);
-            if (optimized.length >= this.length) return this;
-        } while (node !== start);
-        
-        console.log(this.length + "->" + optimized.length);
-        
+            const prev = node.prev.pos();
+            const curr = node.pos();
+            const next = node.next.pos();
+
+            const dir1 = prev.sub(curr).normalize();
+            const dir2 = next.sub(curr).normalize();
+
+            if (dir1.cross(dir2).lengthSq() > 1e-2) {
+                optimized.push(node.index);
+            }
+            node = node.next;
+        } while (node !== head);
+        //Circular
+        optimized.push(optimized[0]);
+        // console.log(this.length + "->" + optimized.length);
         // Replace the current content with optimized version
         this.length = 0;
         this.push(...optimized);
@@ -157,10 +189,49 @@ class EdgeLoop extends IndexArray<BenchVertex> {
         }
         return node;
     }
+
+    public positions() {
+        const positions = this.fetch().map((v) => v.pos());
+        positions.pop();// Exclude Redundant tail
+        return positions;
+    }
+}
+
+class Coplane extends BenchSubGeometry {
+    constructor(baseFace: BenchFace) {
+        super(baseFace.parent);
+        const basePlane = baseFace.tri().getPlane(new Plane());
+        const visited = new Set<number>();
+        const toVisit = [baseFace.index];
+
+        while (toVisit.length > 0) {
+            const curIndex = toVisit.pop()!;
+            if (visited.has(curIndex)) continue;
+            visited.add(curIndex);
+
+            const curTri = this.parent.triAt(curIndex)
+            const coplanar = GeometryUtil.isCoplanar(curTri, basePlane);
+            
+            if (!coplanar) {
+                continue;
+            }
+
+            // Add original triangle indices
+            this.add(curIndex);
+
+            for (const neighborIndex of this.parent.neighborsOf(curIndex)) {
+                if (neighborIndex === undefined) continue;
+                if (visited.has(neighborIndex)) continue;
+                toVisit.push(neighborIndex);
+            }
+        }
+    }
+
 }
 
 
 export {
     EdgeLoop,
     BenchSubGeometry,
+    Coplane
 }

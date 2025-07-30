@@ -1,6 +1,5 @@
 import { 
     Group, 
-    LineBasicMaterial, 
     LineSegments, 
     Mesh, 
     Object3D, 
@@ -12,11 +11,11 @@ import {
 
 import { FileUtil, type ArrangedFiles } from '../util/FileUtil';
 import { LoadingUI, type SubTaskHandler } from '../gui/Loading';
-import { GeometryUtil, type GeometryIndexedMesh, type IndexedBufferGeometry } from '../util/GeometryUtil';
+import { GeometryUtil, type GeometryIndexedMesh, type IndexedBufferGeometry } from '../geometry/GeometryUtil';
 import { Selection } from '../gui/Selection';
-import { BenchGeometry } from '../util/BenchGeometry';
+import { BenchGeometry } from '../geometry/BenchGeometry';
 import { MaterialUtil } from '../util/MaterialUtil';
-import type { BenchSubGeometry } from '../util/SubGeometries';
+import type { BenchSubGeometry } from '../geometry/SubGeometries';
 
 type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
 
@@ -191,17 +190,13 @@ class BenchMesh extends Group {
     public readonly geometry: BenchGeometry;
     constructor(loadedMesh: Mesh) {
         super();
-        const config = window.config.model;
         this.mesh = loadedMesh as GeometryIndexedMesh;
         this.name = loadedMesh.name;
         this.add(this.mesh);
 
         // Wireframe
         this.wireframe = new LineSegments();
-        this.wireframe.material = new LineBasicMaterial({
-            color: config.wireframeColor,
-            linewidth: config.wireframeLineWidth
-        });
+        this.wireframe.material = window.config.model.wireframe_mat;
         // Set render order to draw on top
         this.wireframe.renderOrder = 1;
         this.add(this.wireframe);

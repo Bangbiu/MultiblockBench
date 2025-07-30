@@ -13,6 +13,10 @@ class BenchOutput extends Group {
         this.scale.copy(BenchOutput.BENCH_SCALE);
     }
 
+    public addObject() {
+
+    }
+
     public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
 }
 

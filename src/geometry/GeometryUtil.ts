@@ -12,8 +12,9 @@ import {
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import { BenchEdge, BenchVertex, type BenchGeometry, type IndexIterable } from "./BenchGeometry";
+import { BenchEdge, BenchFace, BenchVertex, type IndexIterable } from "./BenchGeometry";
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
+import type { IndexedBufferGeometry } from "./Primitives";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 type RunnableFuncKeys<T> = {
@@ -36,7 +37,6 @@ type SerializedAttribute = {
 };
 
 type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
-type IndexedBufferGeometry = BufferGeometry & { index: BufferAttribute };
 
 class Line3D {
     public readonly point: Vector3;
@@ -154,39 +154,14 @@ class GeometryUtil {
         return new BufferAttribute(result, 1);
     }
 
-    public static mergeIndexedGeometries(geometries: IndexedBufferGeometry[]): IndexedBufferGeometry {
+    public static mergeGeometries(geometries: BufferGeometry[]): BufferGeometry {
         const merged = mergeBufferGeometries(geometries, true);
         if (!merged) throw new Error("Merge failed");
-        return merged as IndexedBufferGeometry;
+        return merged;
     }
 
-    public static createTriangleGeometry(tri: Triangle): IndexedBufferGeometry {
-        const geometry = new BufferGeometry();
-        geometry.setFromPoints([tri.a, tri.b, tri.c]);
-        geometry.setIndex([0, 1, 2]);
-        geometry.computeVertexNormals();
-        return geometry as IndexedBufferGeometry;
-    }
-
-    public static createPointGeometry(pos: Vector3): BufferGeometry {
-        const geometry = new BufferGeometry();
-        const positions = new Float32Array(3);
-        positions.set([pos.x, pos.y, pos.z], 0);
-        geometry.setAttribute('position', new BufferAttribute(positions, 3));
-        return geometry;
-    }
-
-    public static createVerticesGeometry(verts: IndexIterable<BenchVertex>) {
-        const geometry = new BufferGeometry();
-        const positions = new Float32Array(verts.size * 3);
-        let index = 0;
-        for (const vert of verts.fetch()) {
-            positions.set(vert.pos().toArray(), index * 3);
-            index++;
-        }
-
-        geometry.setAttribute('position', new BufferAttribute(positions, 3));
-        return geometry;
+    public static mergeIndexedGeometries(geometries: IndexedBufferGeometry[]): IndexedBufferGeometry {
+        return this.mergeGeometries(geometries) as IndexedBufferGeometry;
     }
 
     public static createIndexedGeometry(geometry: BufferGeometry): IndexedBufferGeometry {
@@ -197,10 +172,10 @@ class GeometryUtil {
         return new WireframeGeometry(geometry);
     }
 
-    public static createPlainGeometry(subGeom: BenchSubGeometry): IndexedBufferGeometry {
-        const positions = new Float32Array(subGeom.size * 9);
+    public static createPlainGeometry(faceIterable: IndexIterable<BenchFace>): IndexedBufferGeometry {
+        const positions = new Float32Array(faceIterable.size * 9);
         let pointer = 0;
-        for (const face of subGeom.fetch()) {
+        for (const face of faceIterable.fetch()) {
             const tri = face.tri();
             tri.a.toArray(positions, pointer);
             tri.b.toArray(positions, pointer += 3);
@@ -210,53 +185,7 @@ class GeometryUtil {
 
         const geom = new BufferGeometry();
         geom.attributes.position = new BufferAttribute(positions, 3);
-        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(subGeom.size * 3));
-        return geom as IndexedBufferGeometry;
-    }
-
-    public static createCoplane(benchGeom: BenchGeometry, baseIndex: number, subGeom?: BenchSubGeometry): BenchSubGeometry {
-        const basePlane = benchGeom.planeAt(baseIndex);
-        const visited = new Set<number>();
-        const toVisit = [baseIndex];
-        const result = subGeom ?? new BenchSubGeometry(benchGeom);
-
-        while (toVisit.length > 0) {
-            const curIndex = toVisit.pop()!;
-            if (visited.has(curIndex)) continue;
-            visited.add(curIndex);
-
-            const curTri = benchGeom.triAt(curIndex)
-            const coplanar = GeometryUtil.isCoplanar(curTri, basePlane);
-            
-            if (!coplanar) {
-                continue;
-            }
-
-            // Add original triangle indices
-            result.add(curIndex);
-
-            for (const neighborIndex of benchGeom.neighborsOf(curIndex)) {
-                if (neighborIndex === undefined) continue;
-                if (visited.has(neighborIndex)) continue;
-                toVisit.push(neighborIndex);
-            }
-        }
-        
-        return result;
-    }
-
-    public static createEdgesGeometry(edges: IndexIterable<BenchEdge>): IndexedBufferGeometry {
-        const positions = new Float32Array(edges.size * 2 * 3);
-        let pointer = 0;
-        for (const edge of edges.fetch()) {
-            for (const vert of edge.verts()) {
-                vert.pos().toArray(positions, pointer);
-                pointer += 3;
-            }
-        }
-        const geom = new BufferGeometry();
-        geom.attributes.position = new BufferAttribute(positions, 3);
-        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(edges.size * 2));
+        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(faceIterable.size * 3));
         return geom as IndexedBufferGeometry;
     }
 
