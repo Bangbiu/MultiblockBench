@@ -1,63 +1,60 @@
 import {  
-    Group, 
-    LineBasicMaterial, 
-    LineSegments,  
-    Mesh, 
-    Points,
-    PointsMaterial,  
+    Group,
+    Object3D
 } from "three";
-import { GeometryUtil } from "../geometry/GeometryUtil";
-import { BenchSubGeometry } from "../geometry/SubGeometries";
-import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
-import { BenchFace } from "../geometry/BenchGeometry";
+import type { BenchIntersection } from "../scene/BenchModel";
+import { BenchFace, type Object3DProvider } from "../geometry/BenchGeometry";
+import { BenchSubGeometry, Coplane } from "../geometry/SubGeometries";
+
+class ProviderWrapper<P extends Object3DProvider> extends Group {
+    private _provider?: P;
+    constructor(parent: Object3D) {
+        super();
+        parent.add(this);
+    }
+
+    public get provider(): Opt<P> { return this._provider; }
+    public set provider(prov: P) { 
+        this._provider = prov;
+        this.reprovide();
+    }
+
+    public reprovide() {
+        this.clear();
+        if (this._provider) this.add(this._provider.createObject3D());
+    }
+}
 
 class Selection extends Group {
-    public mesh?: BenchMesh;
-    public baseFace?: BenchFace;
-    public faceMesh: Mesh;
-    public coplaneMesh: Mesh;
-    public subGeometry?: BenchSubGeometry;
-    public edges?: LineSegments;
-    public verts?: Points;
+    public baseFace: ProviderWrapper<BenchFace>;
+    public subfaces: ProviderWrapper<BenchSubGeometry>;
     constructor() {
         super();
-
-        this.faceMesh = new Mesh();
-        this.faceMesh.material = window.config.referer.face_mat;
-        
-        this.coplaneMesh = new Mesh();
-        this.coplaneMesh.material = window.config.referer.face_mat;
-
-        this.add(this.faceMesh);
-        this.add(this.coplaneMesh);
-
+        this.baseFace = new ProviderWrapper<BenchFace>(this);
+        this.subfaces = new ProviderWrapper<BenchSubGeometry>(this);
         this.renderOrder = 1;
         this.selectCoplane = this.selectCoplane.bind(this);
+        this.selectNeighbors = this.selectNeighbors.bind(this);
     }
 
-    public get unavailable() { return this.baseFace === undefined; }
-
-    public setVertsMesh() {
-        if (this.subGeometry === undefined) return;
-        this.add(this.subGeometry.createObject3D());
-    }
-
-    public refresh() {
-        if (this.unavailable) return;
-        this.faceMesh.geometry = this.baseFace!.geometry();
-    }
+    public get unavailable() { return this.baseFace.provider === undefined; }
+    public get face() { return this.baseFace.provider; }
 
     public selectByIsect(isect: BenchIntersection) {
         const mesh = isect.benchMesh;
-        this.mesh = mesh;
-        this.baseFace = new BenchFace(mesh.geometry, isect.faceIndex);
-        this.subGeometry = new BenchSubGeometry(mesh.geometry, [isect.faceIndex]);
-        this.setVertsMesh();
-        this.refresh();
+        this.baseFace.provider = new BenchFace(mesh.geometry, isect.faceIndex);
     }
 
     public selectCoplane() {
         if (this.unavailable) return;
+        this.subfaces.provider = new Coplane(this.baseFace.provider!);
+    }
+
+    public selectNeighbors() {
+        if (this.unavailable) return;
+        const sub = new BenchSubGeometry(this.face!.parent);
+        sub.set(this.face!.neighbors());
+        this.subfaces.provider = sub;
     }
 }
 

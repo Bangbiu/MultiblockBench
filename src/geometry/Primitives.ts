@@ -25,7 +25,7 @@ import {
     Triangle
 } from 'three';
 import type { EdgeLoop } from './SubGeometries';
-import type { BenchEdge, BenchFace, BenchVertex, IndexIterable } from './BenchGeometry';
+import type { BenchEdge, BenchFace, BenchVertex, ReferIterable } from './BenchGeometry';
 import { GeometryUtil } from './GeometryUtil';
 interface IndexedBufferGeometry extends BufferGeometry {
     index: BufferAttribute;
@@ -42,7 +42,7 @@ class PointGeometry extends BufferGeometry {
 }
 
 class VerticesGeometry extends BufferGeometry {
-    constructor(verts: IndexIterable<BenchVertex>) {
+    constructor(verts: ReferIterable<BenchVertex>) {
         super();
         const positions = new Float32Array(verts.size * 3);
         let index = 0;
@@ -68,7 +68,7 @@ class LineSegmentGeometry extends BufferGeometry implements IndexedBufferGeometr
 
 class EdgesGeometry extends BufferGeometry implements IndexedBufferGeometry {
     declare public index: BufferAttribute;
-    constructor(edges: IndexIterable<BenchEdge>) {
+    constructor(edges: ReferIterable<BenchEdge>) {
         super();
         const positions = new Float32Array(edges.size * 2 * 3);
         let pointer = 0;
@@ -94,7 +94,7 @@ class TriangleGeometry extends BufferGeometry implements IndexedBufferGeometry {
 
 class FacesGeometry extends BufferGeometry implements IndexedBufferGeometry {
     declare public index: BufferAttribute;
-    constructor(faces: IndexIterable<BenchFace>) {
+    constructor(faces: ReferIterable<BenchFace>) {
         super();
         const positions = new Float32Array(faces.size * 9);
         let pointer = 0;
@@ -148,12 +148,12 @@ class Primitives {
         } = {}
     ): TubeGeometry {
         const {
-            tubularSegments = loop.length * 4,
+            tubularSegments = loop.size * 4,
             radius = 0.1,
             radialSegments = 8,
             closed = true,
         } = options;    
-        const points = loop.fetch().map((v) => v.pos());
+        const points = loop.fetch(v => v.pos());
         const curve = new CatmullRomCurve3(points, closed);
         return new TubeGeometry(curve, tubularSegments, radius, radialSegments, closed);
     }

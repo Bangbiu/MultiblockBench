@@ -12,7 +12,6 @@ import {
 } from "three";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
-import { BenchEdge, BenchFace, BenchVertex, type IndexIterable } from "./BenchGeometry";
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
 import type { IndexedBufferGeometry } from "./Primitives";
 
@@ -172,33 +171,16 @@ class GeometryUtil {
         return new WireframeGeometry(geometry);
     }
 
-    public static createPlainGeometry(faceIterable: IndexIterable<BenchFace>): IndexedBufferGeometry {
-        const positions = new Float32Array(faceIterable.size * 9);
-        let pointer = 0;
-        for (const face of faceIterable.fetch()) {
-            const tri = face.tri();
-            tri.a.toArray(positions, pointer);
-            tri.b.toArray(positions, pointer += 3);
-            tri.c.toArray(positions, pointer += 3);
-            pointer += 3;
-        }
-
-        const geom = new BufferGeometry();
-        geom.attributes.position = new BufferAttribute(positions, 3);
-        geom.setIndex(GeometryUtil.createSequentialIndicesAttr(faceIterable.size * 3));
-        return geom as IndexedBufferGeometry;
-    }
-
     public static createEdgeLoopGeometry(loop: EdgeLoop): IndexedBufferGeometry {
-        const positions = new Float32Array(loop.length * 3);
+        const positions = new Float32Array(loop.size * 3);
         let pointer = 0;
         for (const vert of loop.fetch()) {
             vert.pos().toArray(positions, pointer);
             pointer += 3;
         }
         // Intermittent Edge-Like Index: 0-1, 1-2, 2-3
-        const indexArr = new Uint32Array((loop.length - 1) * 2);
-        for (let index = 0; index < loop.length - 1; index++) {
+        const indexArr = new Uint32Array((loop.size - 1) * 2);
+        for (let index = 0; index < loop.size - 1; index++) {
             indexArr[index * 2] = index;
             indexArr[index * 2 + 1] = index + 1;
         }
@@ -230,18 +212,15 @@ class GeometryUtil {
         let newVertexCounter = 0;
 
         for (const face of subGeometry.fetch()) {
-            const [a, b, c] = face.vertIndices;
+            const verts = face.verts();
 
-            for (const vi of [a, b, c]) {
+            for (const vi of verts) {
                 if (!usedVertexMap.has(vi)) {
                     usedVertexMap.set(vi, newVertexCounter++);
                 }
             }
-
-            newIndices.push(
-                usedVertexMap.get(a)!,
-                usedVertexMap.get(b)!,
-                usedVertexMap.get(c)!
+            verts.forEach(
+                v => newIndices.push(usedVertexMap.get(v)!)
             );
         }
 

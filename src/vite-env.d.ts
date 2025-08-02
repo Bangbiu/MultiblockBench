@@ -47,6 +47,6 @@ type Union<T> = {
 type UnionToIntersection<U> = 
     (U extends any ? (k: U) => void : never) extends (k: infer I) => void ? I : never;
 
-interface Constructor<T> {
+interface Constructor<T = {}> {
     new (...args: any[]): T;
 }

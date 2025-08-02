@@ -10,13 +10,17 @@ const config = {
         }),
 
         edge_mat: new LineBasicMaterial({ 
-            color: 0xFF00FF 
+            color: 0xFF00FF,
+            depthTest: false,
+            depthWrite: false
         }),
 
         vert_mat: new PointsMaterial({
             color: 0xff44aa,
             size: 0.1,
             sizeAttenuation: true,
+            depthTest: false,
+            depthWrite: false
         })
     },
     grid: {

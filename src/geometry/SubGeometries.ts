@@ -1,11 +1,11 @@
-import { BufferGeometry, Group, LineSegments, Mesh,  Plane, Points } from "three";
+import { LineSegments, Mesh,  Plane, Points } from "three";
 import { 
     BenchEdge, 
     BenchFace, 
     BenchGeometry, 
     BenchVertex, 
-    IndexArray, 
-    IndexSet
+    ReferArray, 
+    ReferSet
 } from "./BenchGeometry";
 
 import { 
@@ -19,25 +19,29 @@ class ReferMesh extends Mesh {
     public readonly verts: Points;
     constructor() {
         super();
+        this.material = window.config.referer.face_mat;
+
         this.boundary = new LineSegments();
         this.boundary.material = window.config.referer.edge_mat;
+        this.boundary.renderOrder = 999;
+        
         this.add(this.boundary);
-
         this.verts = new Points();
         this.verts.material = window.config.referer.vert_mat;
+        this.verts.renderOrder = 999;
         this.add(this.verts);
     }
 }
 
-class BenchSubGeometry extends IndexSet<BenchFace> {
+class BenchSubGeometry extends ReferSet<BenchFace> {
     constructor(parent: BenchGeometry, faceIndices?: NullableNumIterable) {
         super(parent, BenchFace, faceIndices);
     }
 
-    public getBounds(): IndexSet<BenchEdge> {
-        const bounds = this.parent.indexSetOf(BenchEdge);
+    public getBounds(): ReferSet<BenchEdge> {
+        const bounds = this.parent.referSetOf(BenchEdge);
         for (const face of this.fetch()) {
-            for (const edge of face.edges()) {
+            for (const edge of face.edges().fetch()) {
                 const [f1, f2] = edge.faceIndices;
                 if (!this.has(f1) || !this.has(f2)) 
                     bounds.add(edge.index);
@@ -50,14 +54,13 @@ class BenchSubGeometry extends IndexSet<BenchFace> {
         return new EdgeLoop(this.getBounds());
     }
 
-    
     public override geometry() {
-        return GeometryUtil.createPlainGeometry(this);
+        return Primitives.faces(this);
     }
-
 
     public override createObject3D(): ReferMesh {
         const mesh = new ReferMesh();
+        mesh.geometry = this.geometry();
         const edgeLoop = this.getEdgeLoop().optimize();
         mesh.boundary.geometry = GeometryUtil.createEdgeLoopGeometry(edgeLoop);
         mesh.verts.geometry = edgeLoop.geometry();
@@ -87,8 +90,8 @@ class VertexNode extends BenchVertex {
     }
 }
 
-class EdgeLoop extends IndexArray<BenchVertex> {
-    constructor(bounds: IndexSet<BenchEdge>) {
+class EdgeLoop extends ReferArray<BenchVertex> {
+    constructor(bounds: ReferSet<BenchEdge>) {
         super(bounds.parent, BenchVertex);
         // Step 1: Build adjacency from vertex -> [connected vertex]
         const adjacency = new Map<number, Set<number>>();
@@ -111,7 +114,7 @@ class EdgeLoop extends IndexArray<BenchVertex> {
         if (start === -1) return;
 
         // Step 3: Walk the loop
-        this.push(start);
+        this.add(start);
         const visitedEdges = new Set<string>();
         let current = start;
 
@@ -132,15 +135,21 @@ class EdgeLoop extends IndexArray<BenchVertex> {
 
             if (next === -1) break;
 
-            this.push(next);
+            this.add(next);
             current = next;
         } while (current !== start);
+    }
+
+    public positions() {
+        const positions = this.fetch(v => v.pos());
+        positions.pop();// Exclude Redundant tail
+        return positions;
     }
 
     public chain(): VertexNode {
         const chainArr = new Array<VertexNode>();
         for (let i = 0; i < this.lastIndex; i++) {
-            chainArr.push(new VertexNode(this.parent, this[i]));
+            chainArr.push(new VertexNode(this.parent, this.at(i)));
         }
 
         chainArr.forEach((node, index) => {
@@ -154,7 +163,7 @@ class EdgeLoop extends IndexArray<BenchVertex> {
 
     public optimize(): this {
         const optimized = new Array<number>();
-        if (this.length < 4) return this;
+        if (this.size < 4) return this;
         const head = this.chain();
         let node = head;
 
@@ -175,8 +184,9 @@ class EdgeLoop extends IndexArray<BenchVertex> {
         optimized.push(optimized[0]);
         // console.log(this.length + "->" + optimized.length);
         // Replace the current content with optimized version
-        this.length = 0;
-        this.push(...optimized);
+        console.log(optimized);
+        
+        this.set(optimized);
         return this;
     }
 
@@ -189,12 +199,6 @@ class EdgeLoop extends IndexArray<BenchVertex> {
         }
         return node;
     }
-
-    public positions() {
-        const positions = this.fetch().map((v) => v.pos());
-        positions.pop();// Exclude Redundant tail
-        return positions;
-    }
 }
 
 class Coplane extends BenchSubGeometry {
@@ -205,22 +209,19 @@ class Coplane extends BenchSubGeometry {
         const toVisit = [baseFace.index];
 
         while (toVisit.length > 0) {
-            const curIndex = toVisit.pop()!;
-            if (visited.has(curIndex)) continue;
-            visited.add(curIndex);
-
-            const curTri = this.parent.triAt(curIndex)
-            const coplanar = GeometryUtil.isCoplanar(curTri, basePlane);
+            const face = this.parent.faceAt(toVisit.pop()!);
+            if (visited.has(face.index)) continue;
+            visited.add(face.index);
+            const coplanar = GeometryUtil.isCoplanar(face.tri(), basePlane);
             
             if (!coplanar) {
                 continue;
             }
 
             // Add original triangle indices
-            this.add(curIndex);
+            this.add(face.index);
 
-            for (const neighborIndex of this.parent.neighborsOf(curIndex)) {
-                if (neighborIndex === undefined) continue;
+            for (const neighborIndex of face.neighbors()) {
                 if (visited.has(neighborIndex)) continue;
                 toVisit.push(neighborIndex);
             }

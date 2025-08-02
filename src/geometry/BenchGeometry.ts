@@ -10,9 +10,9 @@ import {
     Vector3,
     type TypedArray
 } from 'three';
-import { GeometryUtil, type IndexedBufferGeometry } from './GeometryUtil';
+import { type IndexedBufferGeometry } from './GeometryUtil';
 import { Primitives } from './Primitives';
-
+import { IndexIterable } from '../util/DataUtil';
 
 type EdgeTuple = [number, number, number, number]; // [v1, v2, f1, f2]
 
@@ -20,6 +20,12 @@ interface Object3DProvider {
     geometry(): BufferGeometry;
     createObject3D(): Object3D;
 }
+
+interface VertexData {
+    canonicIndex: number
+    edges: Set<number>
+}
+
 
 interface BenchReferer extends Object3DProvider {
     readonly parent: BenchGeometry
@@ -29,78 +35,55 @@ interface BenchReferer extends Object3DProvider {
 
 interface BenchRefererCtor<BR extends BenchReferer> {
     new (parent: BenchGeometry, index: number): BR;
-    mergeGeometries(brs: IndexIterable<BR>): BufferGeometry;
-    mergeObject3D(brs: IndexIterable<BR>): Object3D;
+    mergeGeometries(brs: ReferIterable<BR>): BufferGeometry;
+    mergeObject3D(brs: ReferIterable<BR>): Object3D;
 }
 
-type VertexData = {
-    canonicIndex: number
-    edges: Set<number>
-}
-
-interface IndexIterable<BR extends BenchReferer> extends Iterable<number> {
-    readonly parent: BenchGeometry;
-    readonly creator: BenchRefererCtor<BR>;
-    get size(): number;
-    fetch(): Iterable<BR>;
-}
-
-// abstract class IndexCollection<BR extends BenchReferer> implements IndexIterable<BR> {
-
-// }
-
-class IndexArray<BR extends BenchReferer> extends Array<number> implements IndexIterable<BR>, Object3DProvider {
+abstract class ReferIterable<BR extends BenchReferer, IT extends Iterable<number> = Iterable<number>> 
+extends IndexIterable<BenchRefererCtor<BR>,IT> implements Object3DProvider {
     public readonly parent: BenchGeometry;
-    public readonly creator: BenchRefererCtor<BR>;
-    constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
-        super(...iterable ?? []);
+
+    constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, container: IT) {
+        super(container, creator);
         this.parent = parent;
-        this.creator = creator;
     }
 
-    public get lastIndex() {
-        return this.length - 1;
-    }
-
-    public get size() {
-        return this.length;
-    }
-
-    public fetch(): Array<BR> {
-        const result = new Array<BR>();
-        for (const index of this) 
-            result.push(new this.creator(this.parent, index));
-        return result;
-    }
+    public create(brIndex: number) { return new this.creator(this.parent, brIndex); }
 
     public geometry() { return this.creator.mergeGeometries(this); }
+    public createObject3D(): Object3D { return this.creator.mergeObject3D(this); }
 
-    public createObject3D(): Object3D { return this.creator.mergeObject3D(this);}
+    // public abstract collect<U extends BenchReferer>
+    // (creator: BenchRefererCtor<U>, callbackfn: (value: BR, index: number) => Iterable<number>): ReferIterable<U>;
 }
 
-class IndexSet<BR extends BenchReferer> extends Set<number> implements IndexIterable<BR>, Object3DProvider {
-    public readonly parent: BenchGeometry;
-    public readonly creator: BenchRefererCtor<BR>;
+class ReferArray<BR extends BenchReferer> extends ReferIterable<BR, Array<number>> {
     constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
-        super(iterable);
-        this.parent = parent;
-        this.creator = creator;
+        super(parent, creator, [...iterable ?? []]);
     }
 
-    public fetch(): Set<BR> {
-        const result = new Set<BR>();
-        for (const index of this) 
-            result.add(new this.creator(this.parent, index));
-        return result;
+    public get lastIndex() { return this.container.length - 1; }
+    public override get size() { return this.container.length; }
+
+    public override at(index: number): number { return this.container[index]; }
+    public override add(...items: Array<number>) { this.container.push(...items); }
+    public override append(iterable: Iterable<number>): void { this.container.push(...iterable); }
+    public override clear(): void  { this.container.length = 0; }
+}
+
+class ReferSet<BR extends BenchReferer> extends ReferIterable<BR, Set<number>> {
+    constructor(parent: BenchGeometry, creator: BenchRefererCtor<BR>, iterable?: NullableNumIterable) {
+        super(parent, creator, new Set(iterable));
     }
 
-    public geometry() {
-        return this.creator.mergeGeometries(this);
-    }
+    public override get size(): number { return this.container.size; }
 
-    public createObject3D(): Object3D {
-        return this.creator.mergeObject3D(this);
+    public override add(...items: Array<number>) { this.append(items); }
+    public override append(iterable: Iterable<number>): void {
+        for (const item of iterable) this.container.add(item);
     }
+    public override clear(): void { this.container.clear(); }
+    public has(value: number) { return this.container.has(value); }
 }
 
 /**
@@ -159,7 +142,7 @@ class BenchVertex implements BenchReferer {
     }
 
     public static readonly mergeGeometries = Primitives.verts;
-    public static mergeObject3D(verts: IndexIterable<BenchVertex>): Points {
+    public static mergeObject3D(verts: ReferIterable<BenchVertex>): Points {
         return new Points(
             BenchVertex.mergeGeometries(verts), 
             window.config.referer.vert_mat
@@ -251,7 +234,7 @@ class BenchEdge implements BenchReferer {
     }
 
     public static readonly mergeGeometries = Primitives.edges;
-    public static mergeObject3D(edges: IndexIterable<BenchEdge>): LineSegments {
+    public static mergeObject3D(edges: ReferIterable<BenchEdge>): LineSegments {
         return new LineSegments(
             BenchEdge.mergeGeometries(edges), 
             window.config.referer.edge_mat
@@ -294,33 +277,32 @@ class BenchFace implements BenchReferer {
     public get b(): number { return this.data[1]; }
     public get c(): number { return this.data[2]; }
 
-    public get e1(): number { return this.data[3]; }
-    public get e2(): number { return this.data[4]; }
-    public get e3(): number { return this.data[5]; }
-
-    public get v1(): number { return this.data[6]; }
-    public get v2(): number { return this.data[7]; }
-    public get v3(): number { return this.data[8]; }
-
-    public get indices(): TypedArray { return this.data.subarray(0, 3); }
-    public get edgeIndices(): TypedArray { return this.data.subarray(3, 6); }
-    public get vertIndices(): TypedArray { return this.data.subarray(6, 9); }
-
-    public set indices(truple: Truple) { 
-        for (let i = 0; i < 3; i++) this.data[i] = truple[i];
+    public get indices(): Readonly<Truple> {
+        return [this.data[0], this.data[1], this.data[2]];
     }
 
-    public set edgeIndices(truple: Truple) { 
-        for (let i = 0; i < 3; i++) this.data[i + 3] = truple[i];
-    }
-
-    public set vertIndices(truple: Truple) { 
-        for (let i = 0; i < 3; i++) this.data[i + 6] = truple[i];
-    }
+    public setIndices(truple: Truple) { this.data.set(truple, 0); }
+    public setEdgeIndices(truple: Truple) { this.data.set(truple, 3); }
+    public setVertIndices(truple: Truple) { this.data.set(truple, 6); } 
 
     public tri(): Triangle {
         return new Triangle().setFromAttributeAndIndices(
             this.parent.src!.attributes.position, this.a, this.b, this.c
+        );
+    }
+
+    public edges(): ReferSet<BenchEdge> { 
+        return this.parent.referSetOf(BenchEdge, this.data.subarray(3, 6)); 
+    }
+
+    public verts(): ReferSet<BenchVertex> {
+        return this.parent.referSetOf(BenchVertex, this.data.subarray(6, 9)); 
+    }
+
+    public neighbors(): ReferSet<BenchFace> {
+        return this.parent.referSetOf(BenchFace, 
+            this.edges().fetch(edge => edge.otherFaceOf(this.index))
+            .filter(element => element !== undefined)
         );
     }
 
@@ -334,16 +316,8 @@ class BenchFace implements BenchReferer {
         );
     }
 
-    public edges(): TriData<BenchEdge> {
-        return [
-            this.parent.edgeAt(this.data[3]), 
-            this.parent.edgeAt(this.data[4]),
-            this.parent.edgeAt(this.data[5])
-        ];
-    }
-
     public static readonly mergeGeometries = Primitives.faces;
-    public static mergeObject3D(faces: IndexIterable<BenchFace>) {
+    public static mergeObject3D(faces: ReferIterable<BenchFace>) {
         return new Mesh(
             BenchFace.mergeGeometries(faces), 
             window.config.referer.face_mat
@@ -450,9 +424,9 @@ class BenchGeometry {
                 return resultIndex;
             }) as Truple;
 
-            face.indices = indices;
-            face.vertIndices = vertIndices;
-            face.edgeIndices = edgeIndices;
+            face.setIndices(indices);
+            face.setVertIndices(vertIndices);
+            face.setEdgeIndices(edgeIndices);
 
         }
 
@@ -488,24 +462,18 @@ class BenchGeometry {
         return this;
     }
 
-    public faceAt(index: number): BenchFace {
-        return new BenchFace(this, index);
+    public faceAt(index: number): BenchFace { return new BenchFace(this, index); }
+
+    public edgeAt(index: number): BenchEdge { return new BenchEdge(this, index); }
+
+    public vertAt(index: number): BenchVertex { return new BenchVertex(this, index); }
+
+    public referSetOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): ReferSet<BR> {
+        return new ReferSet(this, ctor, iterable);
     }
 
-    public edgeAt(index: number): BenchEdge {
-        return new BenchEdge(this, index);
-    }
-
-    public vertAt(index: number): BenchVertex {
-        return new BenchVertex(this, index);
-    }
-
-    public indexSetOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): IndexSet<BR> {
-        return new IndexSet(this, ctor, iterable);
-    }
-
-    public indexArrayOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): IndexArray<BR> {
-        return new IndexArray(this, ctor, iterable);
+    public referArrayOf<BR extends BenchReferer>(ctor: BenchRefererCtor<BR>, iterable?: NullableNumIterable): ReferArray<BR> {
+        return new ReferArray(this, ctor, iterable);
     }
 
     public faceGeometryAt(index: number): IndexedBufferGeometry {
@@ -522,14 +490,8 @@ class BenchGeometry {
         return this.triAt(index).getPlane(new Plane());
     }
 
-    public neighborsOf(index: number): Set<number> {
-        const face = this.faceAt(index);
-        const neighbors = new Set<number>();
-        for (const edge of face.edges()) {
-            const neighbor = edge.otherFaceOf(index);
-            if (neighbor) neighbors.add(neighbor);
-        }
-        return neighbors;
+    public neighborsOf(index: number): ReferSet<BenchFace> {
+        return this.faceAt(index).neighbors();
     }
 
     public isManifold(): boolean {
@@ -555,12 +517,13 @@ class BenchGeometry {
 }
 
 export type {
-    IndexIterable
+    ReferIterable,
+    Object3DProvider
 }
 
 export {
-    IndexSet,
-    IndexArray,
+    ReferSet,
+    ReferArray,
     BenchVertex,
     BenchEdge,
     BenchFace,

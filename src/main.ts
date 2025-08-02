@@ -44,7 +44,7 @@ class App {
         this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
         this.loadingUI = new LoadingUI();
         // Menu
-        this.menu = new ContextMenu(this.getMenuSetting()).attach();
+        this.menu = new ContextMenu(this.menuSetting()).attach();
         App.INSTANCE = this;
     }
 
@@ -63,7 +63,7 @@ class App {
         return scene;
     }
 
-    public getMenuSetting(): MenuDeclaration {
+    public menuSetting(): MenuDeclaration {
         return {
             "Load Object...": this.objFileInput.click.bind(this.objFileInput),
             Display: {
@@ -83,7 +83,8 @@ class App {
             Select: {
                 type: "subMenu",
                 menu: {
-                    Coplane: this.model.selection.selectCoplane
+                    Coplane: this.model.selection.selectCoplane,
+                    Neighbor: this.model.selection.selectNeighbors
                 }
             },
             Extract: {
