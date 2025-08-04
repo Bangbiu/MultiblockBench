@@ -6,7 +6,7 @@ abstract class BenchIterable<IT extends Iterable<number> = Iterable<number>> imp
 
     public get container() { return this._container };  
     public set(iterable: Iterable<number>) { 
-        this.clear(); this.append(iterable); 
+        this.clear(); this.append(iterable); return this;
     }
 
     /**
@@ -27,8 +27,8 @@ abstract class BenchIterable<IT extends Iterable<number> = Iterable<number>> imp
         throw new Error("Unexpected state");
     }
 
-    public add(...items: Array<number>): void {
-        this.append(items);
+    public add(...items: Array<number>): this {
+        this.append(items); return this;
     }
 
     public forEach(callbackfn: (value: number, index: number) => void): void {
@@ -50,7 +50,7 @@ abstract class BenchIterable<IT extends Iterable<number> = Iterable<number>> imp
 
     public abstract get size(): number;
     
-    public abstract append(iterable: Iterable<number>): void;
+    public abstract append(iterable: Iterable<number>): this;
     public abstract clear(): void;
 }
 

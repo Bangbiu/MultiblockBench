@@ -84,7 +84,8 @@ class App {
                 type: "subMenu",
                 menu: {
                     Coplane: this.model.selection.selectCoplane,
-                    Neighbor: this.model.selection.selectNeighbors
+                    Neighbor: this.model.selection.selectNeighbors,
+                    BackFace: this.model.selection.selectBackPlane
                 }
             },
             Extract: {

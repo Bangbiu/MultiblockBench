@@ -14,6 +14,7 @@ import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
 import type { IndexedBufferGeometry } from "./Primitives";
+import type { BenchFace } from "./BenchGeometry";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
 type RunnableFuncKeys<T> = {
@@ -58,6 +59,10 @@ class Line3D {
         return this.at(t);
     }
 
+    public distanceTo(v: Vector3): number {
+        return v.distanceTo(this.closestPointTo(v));
+    }
+
     /** Returns true if the given point lies on the line (within epsilon tolerance) */
     public contains(p: Vector3, epsilon = 1e-2): boolean {
         const closest = this.closestPointTo(p);
@@ -88,6 +93,14 @@ class Line3D {
 
 
 class GeometryUtil {
+
+    public static createNormalLine(face: BenchFace) {
+        const tri = face.tri();
+        return new Line3D(
+            tri.getMidpoint(new Vector3()), 
+            tri.getNormal(new Vector3())
+        );
+    }
 
     public static combineGroupGeometries(loadedObj: Group): BufferGeometry | null {
         const geometries: BufferGeometry[] = [];
@@ -376,13 +389,6 @@ class GeometryUtil {
 
 function assertIndexedGeometry(geom: BufferGeometry): asserts geom is IndexedBufferGeometry {
     if (!geom.index) throw new Error("Geometry must be indexed.");
-}
-
-function plug(arr: TypedArray, start: number, iterable: Iterable<number>) {
-    let pointer = start;
-    for (const data of iterable) {
-        arr[pointer++] = data;
-    }
 }
 
 function posKey(v: Vector3) {

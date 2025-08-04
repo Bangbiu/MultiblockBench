@@ -50,7 +50,7 @@ class BenchSubGeometry extends ReferSet<BenchFace> {
         return bounds;
     }
 
-    public getEdgeLoop(): EdgeLoop {
+    public edgeLoop(): EdgeLoop {
         return new EdgeLoop(this.getBounds());
     }
 
@@ -60,13 +60,43 @@ class BenchSubGeometry extends ReferSet<BenchFace> {
 
     public override createObject3D(): ReferMesh {
         const mesh = new ReferMesh();
+        if (this.size === 0) return mesh;
         mesh.geometry = this.geometry();
-        const edgeLoop = this.getEdgeLoop().optimize();
+        const edgeLoop = this.edgeLoop().optimize();
         mesh.boundary.geometry = GeometryUtil.createEdgeLoopGeometry(edgeLoop);
         mesh.verts.geometry = edgeLoop.geometry();
         return mesh;
     }
 
+    public coplane(index: number): BenchSubGeometry {
+        this.clear();
+
+        const baseFace = this.parent.faceAt(index);
+        const basePlane = baseFace.tri().getPlane(new Plane());
+        const visited = new Set<number>();
+        const toVisit = [baseFace.index];
+
+        while (toVisit.length > 0) {
+            const face = baseFace.parent.faceAt(toVisit.pop()!);
+            if (visited.has(face.index)) continue;
+            visited.add(face.index);
+            const coplanar = GeometryUtil.isCoplanar(face.tri(), basePlane);
+            
+            if (!coplanar) {
+                continue;
+            }
+
+            // Add original triangle indices
+            this.add(face.index);
+
+            for (const neighborIndex of face.neighbors()) {
+                if (visited.has(neighborIndex)) continue;
+                toVisit.push(neighborIndex);
+            }
+        }
+
+        return this;
+    }
 }
 
 class VertexNode extends BenchVertex {
@@ -201,38 +231,9 @@ class EdgeLoop extends ReferArray<BenchVertex> {
     }
 }
 
-class Coplane extends BenchSubGeometry {
-    constructor(baseFace: BenchFace) {
-        super(baseFace.parent);
-        const basePlane = baseFace.tri().getPlane(new Plane());
-        const visited = new Set<number>();
-        const toVisit = [baseFace.index];
-
-        while (toVisit.length > 0) {
-            const face = this.parent.faceAt(toVisit.pop()!);
-            if (visited.has(face.index)) continue;
-            visited.add(face.index);
-            const coplanar = GeometryUtil.isCoplanar(face.tri(), basePlane);
-            
-            if (!coplanar) {
-                continue;
-            }
-
-            // Add original triangle indices
-            this.add(face.index);
-
-            for (const neighborIndex of face.neighbors()) {
-                if (visited.has(neighborIndex)) continue;
-                toVisit.push(neighborIndex);
-            }
-        }
-    }
-
-}
 
 
 export {
     EdgeLoop,
-    BenchSubGeometry,
-    Coplane
+    BenchSubGeometry
 }

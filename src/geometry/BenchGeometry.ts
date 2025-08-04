@@ -1,4 +1,5 @@
 import {
+    ArrowHelper,
     BufferAttribute,
     BufferGeometry,
     LineSegments,
@@ -10,7 +11,7 @@ import {
     Vector3,
     type TypedArray
 } from 'three';
-import { type IndexedBufferGeometry } from './GeometryUtil';
+import { GeometryUtil, type IndexedBufferGeometry } from './GeometryUtil';
 import { Primitives } from './Primitives';
 import { IndexIterable } from '../util/DataUtil';
 
@@ -25,7 +26,6 @@ interface VertexData {
     canonicIndex: number
     edges: Set<number>
 }
-
 
 interface BenchReferer extends Object3DProvider {
     readonly parent: BenchGeometry
@@ -66,8 +66,8 @@ class ReferArray<BR extends BenchReferer> extends ReferIterable<BR, Array<number
     public override get size() { return this.container.length; }
 
     public override at(index: number): number { return this.container[index]; }
-    public override add(...items: Array<number>) { this.container.push(...items); }
-    public override append(iterable: Iterable<number>): void { this.container.push(...iterable); }
+    public override add(...items: Array<number>) { this.container.push(...items); return this; }
+    public override append(iterable: Iterable<number>) { this.container.push(...iterable); return this;}
     public override clear(): void  { this.container.length = 0; }
 }
 
@@ -78,9 +78,10 @@ class ReferSet<BR extends BenchReferer> extends ReferIterable<BR, Set<number>> {
 
     public override get size(): number { return this.container.size; }
 
-    public override add(...items: Array<number>) { this.append(items); }
-    public override append(iterable: Iterable<number>): void {
+    public override add(...items: Array<number>) { return this.append(items); }
+    public override append(iterable: Iterable<number>) {
         for (const item of iterable) this.container.add(item);
+        return this;
     }
     public override clear(): void { this.container.clear(); }
     public has(value: number) { return this.container.has(value); }
@@ -306,14 +307,42 @@ class BenchFace implements BenchReferer {
         );
     }
 
+    public normalLine() { return GeometryUtil.createNormalLine(this); }
+
+    public backFace(epsilon = 1e-3): Opt<BenchFace> {
+        const otherCenter = new Vector3();
+        const otherNormal = new Vector3();
+        const normalLine = this.normalLine();
+        let result: Opt<BenchFace>;
+        let minDist = Infinity;
+        for (let i = 0; i < this.parent.faceCount; i++) {
+            if (i === this.index) continue;
+            const curFace = this.parent.faceAt(i);
+            const curTri = curFace.tri();
+            curTri.getMidpoint(otherCenter);
+            curTri.getNormal(otherNormal);
+            if (normalLine.direction.dot(otherNormal) < -1 + epsilon) {
+                const dist = normalLine.distanceTo(otherCenter);   // vector from v1 to v2
+                if (dist < minDist) {
+                    result = curFace;
+                    minDist = dist;
+                }
+            }
+        }
+        return result;
+    }
+
     public geometry(): IndexedBufferGeometry {
         return Primitives.tri(this.tri());
     }
 
     public createObject3D(): Object3D {
-        return new Mesh(
-            this.geometry(), window.config.referer.face_mat
-        );
+        const tri = this.tri();
+        const center = tri.getMidpoint(new Vector3());
+        const normal = tri.getNormal(new Vector3()).normalize();
+        const arrow = new ArrowHelper(normal, center, 0.05, 0xff0000, 0.01,0.01);
+        const mesh = new Mesh(this.geometry(), window.config.referer.face_mat);
+        return mesh.add(arrow);;
     }
 
     public static readonly mergeGeometries = Primitives.faces;
@@ -340,6 +369,8 @@ class BenchGeometry {
         this.edgeAt = this.edgeAt.bind(this);
         this.faceAt = this.faceAt.bind(this);
     }
+
+    public get faceCount(): number {return this.faceAttr.count; }
 
     public buildFrom(geometry: IndexedBufferGeometry, useUint16 = false): this {
         this.src = geometry;

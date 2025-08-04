@@ -4,7 +4,7 @@ import {
 } from "three";
 import type { BenchIntersection } from "../scene/BenchModel";
 import { BenchFace, type Object3DProvider } from "../geometry/BenchGeometry";
-import { BenchSubGeometry, Coplane } from "../geometry/SubGeometries";
+import { BenchSubGeometry } from "../geometry/SubGeometries";
 
 class ProviderWrapper<P extends Object3DProvider> extends Group {
     private _provider?: P;
@@ -35,6 +35,7 @@ class Selection extends Group {
         this.renderOrder = 1;
         this.selectCoplane = this.selectCoplane.bind(this);
         this.selectNeighbors = this.selectNeighbors.bind(this);
+        this.selectBackPlane = this.selectBackPlane.bind(this);
     }
 
     public get unavailable() { return this.baseFace.provider === undefined; }
@@ -47,14 +48,28 @@ class Selection extends Group {
 
     public selectCoplane() {
         if (this.unavailable) return;
-        this.subfaces.provider = new Coplane(this.baseFace.provider!);
+        this.subfaces.provider = this.new()
+            .coplane(this.face!.index);
     }
 
     public selectNeighbors() {
         if (this.unavailable) return;
-        const sub = new BenchSubGeometry(this.face!.parent);
-        sub.set(this.face!.neighbors());
-        this.subfaces.provider = sub;
+        const face = this.face!;
+        this.subfaces.provider = this.new()
+            .append(this.face!.neighbors())
+            .add(face.index);
+    }
+
+    public selectBackPlane() {
+        if (this.unavailable) return;
+        const backface = this.face!.backFace();
+        if (!backface) return;
+        this.subfaces.provider = this.new()
+            .coplane(backface.index);
+    }
+
+    private new(): BenchSubGeometry {
+        return new BenchSubGeometry(this.face!.parent);
     }
 }
 
