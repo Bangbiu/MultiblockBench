@@ -1,4 +1,4 @@
-import { DoubleSide, LineBasicMaterial, MeshBasicMaterial, PointsMaterial } from "three";
+import { DoubleSide, LineBasicMaterial, MeshBasicMaterial, PointsMaterial, Vector3 } from "three";
 
 const config = {
     referer: {
@@ -38,7 +38,8 @@ const config = {
             color: "#EEEEEE",
             linewidth: 1
         })
-    }
+    },
+    scale: new Vector3(16, 16, 16)
 }
 
 declare global {

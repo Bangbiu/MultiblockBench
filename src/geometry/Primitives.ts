@@ -22,11 +22,13 @@ import {
     Vector3,
     BufferGeometry,
     BufferAttribute,
-    Triangle
+    Triangle,
+    Plane
 } from 'three';
-import type { EdgeLoop } from './SubGeometries';
+import type { Coplane, EdgeLoop } from './SubGeometries';
 import type { BenchEdge, BenchFace, BenchVertex, ReferIterable } from './BenchGeometry';
 import { GeometryUtil } from './GeometryUtil';
+
 interface IndexedBufferGeometry extends BufferGeometry {
     index: BufferAttribute;
 }
@@ -109,6 +111,77 @@ class FacesGeometry extends BufferGeometry implements IndexedBufferGeometry {
         this.attributes.position = new BufferAttribute(positions, 3);
         this.setIndex(GeometryUtil.createSequentialIndicesAttr(faces.size * 3));
     }
+
+    
+}
+
+/**
+ * Stores:
+ *  - attributes.position: 3D positions (indexed, unique)
+ *  - attributes.pos2d:    2D positions flattened onto the plane (itemSize = 2)
+ *  - index:               triangle indices
+ *  - .plane:              the THREE.Plane the coplane lies on
+ */
+class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
+    declare public index: BufferAttribute;
+    public readonly plane: Plane;
+
+    /** Custom attribute name for in-plane 2D coords */
+    public static readonly ATTR_POS2D = "pos2d";
+
+    constructor(coplane: Coplane) {
+        super();
+
+        // 1) Early out: empty selection
+        if (coplane.size === 0) {
+            this.plane = new Plane(new Vector3(0, 0, 1), 0);
+            // keep empty geometry
+            return;
+        }
+
+        // 2) Gather triangles’ 3D positions (non-indexed first)
+        const faceCount = coplane.size;
+        const positions = new Float32Array(faceCount * 9);
+        let ptr = 0;
+
+        this.plane = coplane.get(0).tri().getPlane(new Plane());
+
+        for (const face of coplane.fetch()) {
+            const tri = face.tri();
+            ptr = tri.toArray(positions, ptr);
+        }
+
+        this.attributes.position = new BufferAttribute(positions, 3);
+        this.setIndex(GeometryUtil.createSequentialIndicesAttr(faceCount * 3));
+
+        // 4) in-plane ONB
+        const n = this.plane.normal.clone().normalize();
+
+        // robust tangent selection
+        const pick = Math.abs(n.x) > 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+        const t = new Vector3().crossVectors(n, pick).normalize();     // tangent in plane
+        const b = new Vector3().crossVectors(n, t).normalize();        // bitangent in plane
+
+        // 5) Project unique positions to plane & store pos2d
+        const posAttr = this.attributes.position as BufferAttribute;
+        const pos2d = new Float32Array(posAttr.count * 2);
+        const v = new Vector3();
+        const p = new Vector3();
+
+        for (let i = 0; i < posAttr.count; i++) {
+            v.fromBufferAttribute(posAttr, i);
+            // Project to plane, then to 2D basis
+            this.plane.projectPoint(v, p);
+            pos2d[i * 2 + 0] = p.dot(t);
+            pos2d[i * 2 + 1] = p.dot(b);
+        }
+
+        this.setAttribute(CoplaneGeometry.ATTR_POS2D, new BufferAttribute(pos2d, 2));
+
+        // Optional niceties
+        this.computeVertexNormals();
+        this.computeBoundingSphere();
+    }
 }
 
 class Primitives {
@@ -139,6 +212,8 @@ class Primitives {
     static verts = (...args: ConstructorParameters<typeof VerticesGeometry>) => new VerticesGeometry(...args);
     static edges = (...args: ConstructorParameters<typeof EdgesGeometry>) => new EdgesGeometry(...args);
     static faces = (...args: ConstructorParameters<typeof FacesGeometry>) => new FacesGeometry(...args);
+
+    static coplane = (...args: ConstructorParameters<typeof CoplaneGeometry>) => new CoplaneGeometry(...args);
 
     static tubeFromLoop(loop: EdgeLoop, options: { 
         tubularSegments?: number; 

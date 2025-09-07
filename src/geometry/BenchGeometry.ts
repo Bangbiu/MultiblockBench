@@ -278,18 +278,22 @@ class BenchFace implements BenchReferer {
     public get b(): number { return this.data[1]; }
     public get c(): number { return this.data[2]; }
 
-    public get indices(): Readonly<Truple> {
-        return [this.data[0], this.data[1], this.data[2]];
-    }
-
     public setIndices(truple: Truple) { this.data.set(truple, 0); }
     public setEdgeIndices(truple: Truple) { this.data.set(truple, 3); }
     public setVertIndices(truple: Truple) { this.data.set(truple, 6); } 
 
-    public tri(): Triangle {
+    public indices(): Readonly<Truple> {
+        return [this.data[0], this.data[1], this.data[2]];
+    }
+
+    public tri(): Readonly<Triangle> {
         return new Triangle().setFromAttributeAndIndices(
             this.parent.src!.attributes.position, this.a, this.b, this.c
         );
+    }
+
+    public plane(): Plane {
+        return this.tri().getPlane(new Plane());
     }
 
     public edges(): ReferSet<BenchEdge> { 

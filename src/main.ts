@@ -1,4 +1,4 @@
-import { FullScreenCamera, BenchRenderer, ModelOrbitalControl } from './scene/BenchRender';
+import { BenchCamera, BenchRenderer, ModelOrbitalControl, OrthoPlaneControls } from './scene/BenchRender';
 import { BenchGrid } from './scene/BenchGrid';
 import { BenchLighting } from './scene/BenchLighting';
 import { BenchModel } from './scene/BenchModel';
@@ -14,8 +14,9 @@ bootstrap();
 class App {
     // Render
     public readonly renderer: BenchRenderer;
-    public readonly camera: FullScreenCamera;
+    public readonly camera: BenchCamera;
     public readonly orbitalControl: ModelOrbitalControl;
+    public readonly planeControl: OrthoPlaneControls;
     public readonly scene: Scene;
     // Data
     public readonly raycaster: Raycaster;
@@ -28,10 +29,11 @@ class App {
     public readonly loadingUI: LoadingUI;
     
     constructor() {
-        this.camera = new FullScreenCamera();
+        this.camera = new BenchCamera();
         this.scene = this.createScene();
-        this.renderer = new BenchRenderer(this.scene, this.camera);
-        this.orbitalControl = new ModelOrbitalControl(this.camera, this.renderer);
+        this.renderer = new BenchRenderer(this.scene, this.camera.current);
+        this.planeControl = new OrthoPlaneControls(this.camera.orthographic, this.renderer.domElement);
+        this.orbitalControl = new ModelOrbitalControl(this.camera.perspective, this.renderer);
         // Interaction
         this.raycaster = new Raycaster();
         this.mouse = new Vector2();
@@ -47,6 +49,8 @@ class App {
         this.menu = new ContextMenu(this.menuSetting()).attach();
         App.INSTANCE = this;
     }
+
+    public get selection() { return this.model.selection; }
 
     public init(): this {
         this.createScene();
@@ -83,21 +87,30 @@ class App {
             Select: {
                 type: "subMenu",
                 menu: {
-                    Coplane: this.model.selection.selectCoplane,
-                    Neighbor: this.model.selection.selectNeighbors,
-                    BackFace: this.model.selection.selectBackPlane
+                    Coplane: this.selection.selectCoplane,
+                    Neighbor: this.selection.selectNeighbors,
+                    BackFace: this.selection.selectBackPlane,
+                    Deselect: this.selection.deselect,
                 }
             },
             Extract: {
                 type: "subMenu",
                 menu: {
-                    Texture: "option",
+                    Texture: this.selection.extractSubMesh,
                     idk: {type: "subMenu", menu: {idk: "option"}},
                     radio1: "radio",
-                    radio2: "radio"
+                    slider1: "slider"
                 }
             }
         }
+    }
+
+    public toggleFocus(): this {
+        if (this.selection.unavailable) return this;
+        this.camera.toggle();
+        this.selection.focusCamera(this.camera.current);
+        this.renderer.setCamera(this.camera.current);
+        return this;
     }
 
     public registerEvents(): this {
@@ -109,13 +122,16 @@ class App {
             // convert mouse to normalized device coords
             this.mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
             this.mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            this.raycaster.setFromCamera(this.mouse, this.camera);
+            this.raycaster.setFromCamera(this.mouse, this.camera.current);
             this.model.selectWith(this.raycaster);
         });
 
         // KeyBoard
         document.addEventListener("keyup", (event) => {
-            if (event.key === 'Delete') this.model.clear();
+            switch (event.key) {
+                case "Delete": this.model.clear(); break;
+                case "f": this.toggleFocus(); break;
+            }
         });
 
         // Menu
@@ -133,14 +149,6 @@ class App {
         });
 
         return this;
-    }
-
-    public extractSubMesh() {
-        const extracted = this.model.extractSelected();
-        if (extracted) {
-            console.log(extracted);
-            this.output.add(extracted);
-        }
     }
 
     public update(): void {

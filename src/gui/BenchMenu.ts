@@ -126,6 +126,81 @@ class RadioButtonOption extends CheckBoxOption<RadioButtonOption> {
     }
 }
 
+class BenchSlider extends ContextMenuOption<BenchSlider> {
+    private readonly input: HTMLInputElement;
+    private readonly valueLabel: HTMLSpanElement;
+
+    private _min: number = 0;
+    private _max: number = 100;
+    private _step: number = 1;
+    private _value: number = 0;
+
+    constructor(parameters: Partial<BenchSlider> = {}) {
+        super();
+
+        this.hideParentOnAct = false;
+
+        this.box.style.visibility = "visible";
+        this.box.style.width = "150px";
+        this.box.style.display = "flex";
+        this.box.style.alignItems = "center";
+
+        // Range input
+        this.input = document.createElement("input");
+        this.input.type = "range";
+        this.input.min = this._min.toString();
+        this.input.max = this._max.toString();
+        this.input.step = this._step.toString();
+        this.input.value = this._value.toString();
+        this.input.style.flex = "1";
+
+        // Value label
+        this.valueLabel = document.createElement("span");
+        this.valueLabel.style.marginLeft = "8px";
+        this.valueLabel.textContent = this._value.toString();
+
+        this.box.appendChild(this.input);
+        this.box.appendChild(this.valueLabel);
+
+        this.input.addEventListener("input", () => {
+            this._value = parseFloat(this.input.value);
+            this.valueLabel.textContent = this._value.toString();
+            //this._action();
+        });
+
+        this.updateValues(parameters);
+    }
+
+    public get min() { return this._min; }
+    public set min(value: number) {
+        this._min = value;
+        this.input.min = value.toString();
+    }
+
+    public get max() { return this._max; }
+    public set max(value: number) {
+        this._max = value;
+        this.input.max = value.toString();
+    }
+
+    public get step() { return this._step; }
+    public set step(value: number) {
+        this._step = value;
+        this.input.step = value.toString();
+    }
+
+    public get value() { return this._value; }
+    public set value(val: number) {
+        this._value = val;
+        this.input.value = val.toString();
+        this.valueLabel.textContent = val.toString();
+    }
+
+    public override set action(callback: (val: number) => void) {
+        super.action = () => callback(this._value);
+    }
+}
+
 class SubMenuOption extends ContextMenuOption<SubMenuOption> {
     private subMenu?: ContextMenu;
 
@@ -169,14 +244,16 @@ type MenuOptType = {
     option: typeof ContextMenuOption,
     subMenu: typeof SubMenuOption,
     checkBox: typeof CheckBoxOption,
-    radio: typeof RadioButtonOption
+    radio: typeof RadioButtonOption,
+    slider: typeof BenchSlider
 };
 
 const MenuOptCtor: MenuOptType = {
     option: ContextMenuOption,
     subMenu: SubMenuOption,
     checkBox: CheckBoxOption,
-    radio: RadioButtonOption
+    radio: RadioButtonOption,
+    slider: BenchSlider
 };
 
 type MenuOptTypeKey = keyof MenuOptType;

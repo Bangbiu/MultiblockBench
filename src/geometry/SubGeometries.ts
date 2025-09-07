@@ -1,4 +1,4 @@
-import { LineSegments, Mesh,  Plane, Points } from "three";
+import { BufferAttribute, BufferGeometry, LineSegments, Mesh,  Plane, Points, Vector2, Vector3 } from "three";
 import { 
     BenchEdge, 
     BenchFace, 
@@ -12,7 +12,7 @@ import {
     GeometryUtil,
     Line3D,
 } from "./GeometryUtil";
-import { Primitives } from "./Primitives";
+import { Primitives, type IndexedBufferGeometry } from "./Primitives";
 
 class ReferMesh extends Mesh {
     public readonly boundary: LineSegments;
@@ -214,7 +214,7 @@ class EdgeLoop extends ReferArray<BenchVertex> {
         optimized.push(optimized[0]);
         // console.log(this.length + "->" + optimized.length);
         // Replace the current content with optimized version
-        console.log(optimized);
+        // console.log(optimized);
         
         this.set(optimized);
         return this;
@@ -231,9 +231,52 @@ class EdgeLoop extends ReferArray<BenchVertex> {
     }
 }
 
+// class Face2D {
+//     public points: TriData<Vector2>;
+//     public uv: TriData<Vector2>;
+//     constructor() {
+
+//     }
+// };
+
+class Coplane extends BenchSubGeometry {
+    public plane: Plane = new Plane();
+    public origin: Vector3 = new Vector3();
+    constructor(baseFace: BenchFace) {
+        super(baseFace.parent);
+        this.coplane(baseFace.index);
+        const tri = baseFace.tri();
+        tri.getPlane(this.plane);
+        tri.getMidpoint(this.origin);
+    }
+
+    public extract()  {
+        const geometry = GeometryUtil.extractSubGeometry(this);
+
+        const xAxis = new Vector3().subVectors(this.parent.vertAt(this.fetch()[0].a).pos(), this.origin).normalize();
+        const yAxis = new Vector3().crossVectors(this.plane.normal, xAxis).normalize();
+        const posVec = new Vector3();
+        const projected = new Vector3();
+        geometry.forEachPosition((pos) => {
+            // Project position to plane
+            // const worldPos = new Vector3().fromBufferAttribute(posAttr, globalIndex);
+            // const v = worldPos.clone().sub(this.origin);
+            // const x = v.dot(xAxis);
+            // const y = v.dot(yAxis);
+            // const z = 0;
+            posVec.fromArray(pos);
+            this.plane.projectPoint(posVec, projected);
+            projected.toArray(pos);
+        });
+
+        return geometry as IndexedBufferGeometry;
+    }
+}
+
 
 
 export {
     EdgeLoop,
-    BenchSubGeometry
+    BenchSubGeometry,
+    Coplane
 }

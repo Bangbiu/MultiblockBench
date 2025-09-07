@@ -1,11 +1,15 @@
 import { 
     BufferAttribute, 
     BufferGeometry, 
+    DoubleSide, 
     Group, 
     Line3, 
     Mesh, 
+    MeshBasicMaterial, 
+    MeshPhongMaterial, 
     Plane, 
     Triangle, 
+    Vector2, 
     Vector3, 
     WireframeGeometry, 
     type TypedArray, 
@@ -13,7 +17,7 @@ import {
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";
-import type { IndexedBufferGeometry } from "./Primitives";
+import { Primitives, type IndexedBufferGeometry } from "./Primitives";
 import type { BenchFace } from "./BenchGeometry";
 
 //AsyncFuncKeys<Omit<typeof GeometryUtil, 'run'>>;
@@ -37,6 +41,7 @@ type SerializedAttribute = {
 };
 
 type GeometryIndexedMesh = Mesh & { geometry: IndexedBufferGeometry };
+
 
 class Line3D {
     public readonly point: Vector3;
@@ -215,6 +220,31 @@ class GeometryUtil {
         return coplanar;
     }
 
+    public static extractSubGeometry(subGeometry: BenchSubGeometry) {
+        const geometry = Primitives.faces(subGeometry);
+        const parent = subGeometry.parent;
+        const src = parent.src!;
+        const size = subGeometry.size;
+        
+        if (!src.attributes.uv) return geometry;
+        const uvAttr = src.attributes.uv as BufferAttribute;
+        const uvArr = new Float32Array(size * 6);
+        const uv = new Vector2();
+        let i = 0;
+        for (const face of subGeometry.fetch()) {
+            for (const vert of face.verts().fetch()) {
+                // Copy UV
+                if (uvAttr) {
+                    uv.fromBufferAttribute(uvAttr, vert.index);
+                    uv.toArray(uvArr!, i * 2)
+                }
+                i++;
+            }
+        }
+        geometry.attributes.uv = new BufferAttribute(uvArr, 2);
+        return geometry;
+    }
+
     public static extractSubMesh(srcMesh: GeometryIndexedMesh, subGeometry: BenchSubGeometry): Mesh {
         const srcGeo = srcMesh.geometry;
         
@@ -225,16 +255,14 @@ class GeometryUtil {
         let newVertexCounter = 0;
 
         for (const face of subGeometry.fetch()) {
-            const verts = face.verts();
+            const indices = face.indices();
 
-            for (const vi of verts) {
+            for (const vi of indices) {
                 if (!usedVertexMap.has(vi)) {
                     usedVertexMap.set(vi, newVertexCounter++);
                 }
             }
-            verts.forEach(
-                v => newIndices.push(usedVertexMap.get(v)!)
-            );
+            indices.forEach(index => newIndices.push(usedVertexMap.get(index)!));
         }
 
         // Create reverse map: newIndex -> oldIndex
@@ -265,7 +293,12 @@ class GeometryUtil {
         const newIndexBuffer = new IndexArrayConstructor(newIndices);
         newGeo.setIndex(new BufferAttribute(newIndexBuffer, 1));
 
-        const subMesh = new Mesh(newGeo, srcMesh.material);
+        const flatMaterial = new MeshBasicMaterial({
+            map: (srcMesh.material as MeshPhongMaterial).map,
+            side: DoubleSide,
+        });
+
+        const subMesh = new Mesh(newGeo, flatMaterial);
         return subMesh;
     }
 

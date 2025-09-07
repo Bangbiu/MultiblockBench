@@ -2,9 +2,9 @@ import {
     Group, 
     LineSegments, 
     Mesh, 
+    MeshPhongMaterial, 
     Object3D, 
     Raycaster,
-    Vector3,
     WireframeGeometry,
     type Intersection,
 } from 'three';
@@ -35,7 +35,7 @@ class BenchModel extends Group {
         super();
         this.benchMeshes = new Set();
         this.selection = new Selection();
-        this.scale.copy(BenchModel.BENCH_SCALE);
+        this.scale.copy(window.config.scale);
     }
 
     public get showWireframe() { return this._showWireframe; }
@@ -180,8 +180,6 @@ class BenchModel extends Group {
         return undefined;
         //return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
     }
-
-    public static readonly BENCH_SCALE = new Vector3(16, 16, 16);
 }
 
 class BenchMesh extends Group {
@@ -202,6 +200,10 @@ class BenchMesh extends Group {
         this.add(this.wireframe);
         // BenchGeometry
         this.geometry = new BenchGeometry();
+    }
+
+    public get texture() {
+        return (this.mesh.material as MeshPhongMaterial).map!;
     }
 
     public async toIndexed() {
