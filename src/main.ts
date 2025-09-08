@@ -8,6 +8,7 @@ import { LoadingUI } from './gui/Loading';
 import { bootstrap } from './config';
 import { BenchOutput } from './scene/BenchOutput';
 import { ContextMenu, type MenuDeclaration } from './gui/BenchMenu';
+import { test } from './test';
 
 bootstrap();
 
@@ -101,7 +102,8 @@ class App {
                     radio1: "radio",
                     slider1: "slider"
                 }
-            }
+            },
+            test: test
         }
     }
 
@@ -157,15 +159,6 @@ class App {
         //this.renderer.render(this.scene, this.camera);
         this.renderer.composer.render();
         this.orbitalControl.update();
-    }
-
-    public static connect<T, K extends BooleanKeys<T>>(checkbox: HTMLInputElement, obj: T, property: K): void {
-        if (checkbox.type === "checkbox") {
-            checkbox.checked = obj[property] as boolean;
-            checkbox.addEventListener("change", () => {
-                obj[property] = checkbox.checked as T[K]; // safe cast
-            });
-        }
     }
 
     public static loadElement(id: string) {

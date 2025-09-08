@@ -14,6 +14,7 @@ import {
     WireframeGeometry, 
     type TypedArray, 
 } from "three";
+import "./GeometryAddons";
 import { mergeBufferGeometries, mergeVertices } from "three-stdlib";
 import GeometryWorker from '../worker/GeometryWorker?worker';
 import { BenchSubGeometry, type EdgeLoop } from "./SubGeometries";

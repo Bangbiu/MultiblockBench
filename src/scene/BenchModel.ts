@@ -35,6 +35,7 @@ class BenchModel extends Group {
         super();
         this.benchMeshes = new Set();
         this.selection = new Selection();
+        this.add(this.selection);
         this.scale.copy(window.config.scale);
     }
 

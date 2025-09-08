@@ -25,7 +25,7 @@ import {
     Triangle,
     Plane
 } from 'three';
-import type { Coplane, EdgeLoop } from './SubGeometries';
+import { Coplane, type EdgeLoop } from './SubGeometries';
 import type { BenchEdge, BenchFace, BenchVertex, ReferIterable } from './BenchGeometry';
 import { GeometryUtil } from './GeometryUtil';
 
@@ -142,16 +142,19 @@ class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
         // 2) Gather triangles’ 3D positions (non-indexed first)
         const faceCount = coplane.size;
         const positions = new Float32Array(faceCount * 9);
+        const uvs = new Float32Array(faceCount * 6);
         let ptr = 0;
 
-        this.plane = coplane.get(0).tri().getPlane(new Plane());
+        this.plane = coplane.get(0).plane();
 
         for (const face of coplane.fetch()) {
-            const tri = face.tri();
-            ptr = tri.toArray(positions, ptr);
+            face.uvCoords(uvs, ptr * 6);
+            face.tri().toArray(positions, ptr * 9);
+            ptr++;
         }
 
         this.attributes.position = new BufferAttribute(positions, 3);
+        this.attributes.uv = new BufferAttribute(uvs, 2);
         this.setIndex(GeometryUtil.createSequentialIndicesAttr(faceCount * 3));
 
         // 4) in-plane ONB
@@ -181,6 +184,10 @@ class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
         // Optional niceties
         this.computeVertexNormals();
         this.computeBoundingSphere();
+    }
+
+    public get pos2DAttr() {
+        return this.getAttribute(CoplaneGeometry.ATTR_POS2D);
     }
 }
 

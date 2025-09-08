@@ -8,6 +8,7 @@ import {
     Plane,
     Points,
     Triangle,
+    Vector2,
     Vector3,
     type TypedArray
 } from 'three';
@@ -104,6 +105,8 @@ class BenchVertex implements BenchReferer {
     public readonly canonicIndex: number;
     public readonly data: TypedArray;
     public readonly edgeCount: number;
+
+    private readonly _posVec: Vector3;
     constructor(parent: BenchGeometry, index: number) {
         this.parent = parent;
         this.index = index;
@@ -113,10 +116,11 @@ class BenchVertex implements BenchReferer {
         this.data = this.parent.vertEdgesPool
         .subarray(head, rear);
         this.edgeCount = this.data.length;
+        this._posVec = new Vector3();
     }
 
     public pos(): Vector3 {
-        return new Vector3().fromBufferAttribute(
+        return this._posVec.fromBufferAttribute(
             this.parent.src!.attributes.position, 
             this.canonicIndex
         );
@@ -290,6 +294,20 @@ class BenchFace implements BenchReferer {
         return new Triangle().setFromAttributeAndIndices(
             this.parent.src!.attributes.position, this.a, this.b, this.c
         );
+    }
+    
+    public uvCoords<T extends number[] | TypedArray>(array: T, offset = 0): T {
+        const uvAttr = this.parent.src!.attributes.uv as BufferAttribute;
+        const uvs = uvAttr.array as ArrayLike<number>;
+        const vertIndices = [
+            this.a * 2, this.a * 2 + 1,
+            this.b * 2, this.b * 2 + 1,
+            this.c * 2, this.c * 2 + 1
+        ]
+        for (let index = 0; index < 6; index++) {
+            array[offset + index] = uvs[vertIndices[index]];
+        }
+        return array;
     }
 
     public plane(): Plane {

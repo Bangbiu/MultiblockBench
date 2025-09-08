@@ -7,7 +7,7 @@ import {
 import type { BenchIntersection, BenchMesh } from "../scene/BenchModel";
 import { BenchFace, type Object3DProvider } from "../geometry/BenchGeometry";
 import { BenchSubGeometry, Coplane } from "../geometry/SubGeometries";
-import { MaterialUtil } from "../util/MaterialUtil";
+import { extractCoplaneImage, MaterialUtil } from "../util/MaterialUtil";
 
 class ProviderWrapper<P extends Object3DProvider> extends Group {
     private _provider?: P;
@@ -94,10 +94,9 @@ class Selection extends Group {
         const subfaces = this.subfaces.provider;
         if (!subfaces || !(subfaces instanceof Coplane)) return;
         const benchMesh = this.benchMesh!;
-        // const plane = subfaces.plane;
-        // const origin = subfaces.origin;
         this.deselect();
-        const img = MaterialUtil.exportCoplanarTexture(subfaces, benchMesh.texture);
+        const img = extractCoplaneImage(subfaces, benchMesh.texture);
+        
         MaterialUtil.saveImageDataAsPNG(img);
     }
 
