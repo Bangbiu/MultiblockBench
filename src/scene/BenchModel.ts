@@ -17,8 +17,6 @@ import { BenchGeometry } from '../geometry/BenchGeometry';
 import { MaterialUtil } from '../util/MaterialUtil';
 import type { BenchSubGeometry } from '../geometry/SubGeometries';
 
-type BenchMeshAsyncFn = (mesh: BenchMesh, index: number) => Promise<void>;
-
 type BenchIntersection = {
     benchMesh: BenchMesh,
     faceIndex: number,
@@ -78,30 +76,26 @@ class BenchModel extends Group {
 
     public async load(fileList: ArrangedFiles, loadingUI: LoadingUI) {
         this.clearBench();
+        // Loading File
         loadingUI.onStart();
-        await loadingUI.startProcess("Loading Bench Model")
-        .then("Obj File", 
-            handler => this.fromObjFile(fileList, handler))
-        .then("Index Geometry", 
-            this.indexGeometries.bind(this))
-        .then("Create Bench Geometry", 
-            this.createBenchGeometry.bind(this))
-        .finally("Create Wireframe",
-            this.createWireframes.bind(this))
-        .work();
+        let loadedObj: Opt<Group>;
+        const process = loadingUI.startProcess("Loading Model File");
+        await process.then("Obj File", handler => 
+            FileUtil.loadObj(fileList, handler).then(result => loadedObj = result)
+        ).then("Assign Tasks", handler => {
+            for (const obj of loadedObj!.children) {
+                const mesh = obj as Mesh;
+                if (mesh.isMesh) {
+                    process.then("Process Model Data", 
+                        handler => BenchMesh.create(mesh, handler)
+                        .then(result => this.add(result))
+                    );
+                }
+            }
+            process.terminate();
+            handler.onLoad();
+        }).work();
         this.refresh();
-    }
-
-    public fromGroup(group: Group) {
-        for (const obj of group.children) {
-            if ((obj as Mesh).isMesh) 
-                this.add(new BenchMesh(obj.clone() as Mesh));
-        }
-    }
-
-    public async fromObjFile(fileList: ArrangedFiles, handler: SubTaskHandler) {
-        const group = await FileUtil.loadObj(fileList, handler)
-        this.fromGroup(group);
     }
 
     public selectWith(raycaster: Raycaster): this {
@@ -115,36 +109,6 @@ class BenchModel extends Group {
     public refresh() {
         this.showWireframe = this._showWireframe;
         this.hideMeshes = this._hideMeshes;
-    }
-
-    public async runOnAll(callback: BenchMeshAsyncFn, eventHandler?: SubTaskHandler) {
-        const tasks: (() => Promise<void>)[] = new Array();
-        const meshes = Array.from(this.benchMeshes);
-        for (let index = 0; index < meshes.length; index++) {
-            const mesh = meshes[index];
-            tasks.push(async () => {
-                eventHandler?.onProgress({ 
-                    progess: index / this.children.length,
-                    text: mesh.name
-                });
-                await callback(mesh, index);
-            });
-        }
-        const promises = tasks.map(task => task());
-        await Promise.all(promises);
-        eventHandler?.onLoad();
-    }
-
-    public async indexGeometries(eventHandler?: SubTaskHandler) {
-        await this.runOnAll(mesh => mesh.toIndexed(), eventHandler);
-    }
-
-    public async createWireframes(eventHandler?: SubTaskHandler) {
-        await this.runOnAll(mesh => mesh.createWireframe(), eventHandler);
-    }
-
-    public async createBenchGeometry(eventHandler?: SubTaskHandler) {
-        await this.runOnAll(mesh => mesh.createGeometry(), eventHandler)
     }
 
     protected getClosestIntersection(raycaster: Raycaster): Opt<BenchIntersection> {
@@ -187,7 +151,7 @@ class BenchMesh extends Group {
     private readonly wireframe: LineSegments;
     private readonly mesh: GeometryIndexedMesh;
     public readonly geometry: BenchGeometry;
-    constructor(loadedMesh: Mesh) {
+    private constructor(loadedMesh: Mesh) {
         super();
         this.mesh = loadedMesh as GeometryIndexedMesh;
         this.name = loadedMesh.name;
@@ -247,6 +211,18 @@ class BenchMesh extends Group {
 
     public faceGeometryAt(index: number) {
         return this.geometry.faceGeometryAt(index);
+    }
+
+    public static async create(mesh: Mesh, eventHandler?: SubTaskHandler) {
+        const bm = new BenchMesh(mesh.clone(false));
+        eventHandler?.onProgress({ progess: 0, text: mesh.name });
+        await bm.toIndexed();
+        eventHandler?.onProgress({ progess: 0.33, text: mesh.name });
+        await bm.createGeometry();
+        eventHandler?.onProgress({ progess: 0.66, text: mesh.name });
+        await bm.createWireframe();
+        eventHandler?.onLoad();
+        return bm;
     }
 }
 

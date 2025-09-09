@@ -22,10 +22,7 @@ export async function test() {
     console.log(coplaneGeom.plane);
     
 
-    const mesh = new BenchMesh(defMesh(coplaneGeom));
-    await mesh.toIndexed();
-    await mesh.createGeometry();
-    await mesh.createWireframe();
+    const mesh = await BenchMesh.create(defMesh(coplaneGeom));
     
     app.model.add(mesh);
 }

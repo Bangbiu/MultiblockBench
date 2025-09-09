@@ -8,7 +8,6 @@ import {
     Plane,
     Points,
     Triangle,
-    Vector2,
     Vector3,
     type TypedArray
 } from 'three';
@@ -530,12 +529,10 @@ class BenchGeometry {
     }
 
     public faceGeometryAt(index: number): IndexedBufferGeometry {
-        this.assertSourceGeometry();
         return this.faceAt(index).geometry();
     }
 
     public triAt(index: number): Triangle {
-        this.assertSourceGeometry();
         return this.faceAt(index).tri();
     }
 

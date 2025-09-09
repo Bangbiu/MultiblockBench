@@ -1,4 +1,4 @@
-import { BufferAttribute, BufferGeometry, LineSegments, Mesh,  Plane, Points, Vector2, Vector3 } from "three";
+import { LineSegments, Mesh,  Plane, Points, Vector3 } from "three";
 import { 
     BenchEdge, 
     BenchFace, 

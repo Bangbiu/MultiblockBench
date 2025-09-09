@@ -116,6 +116,10 @@ class SubTaskHandler implements Progressable {
         return this;
     }
 
+    public terminate() {
+        return this.finally("Finished", handler => handler.onLoad());
+    }
+
     public clear(): void {
         this.subHandlers.length = 0;
     }

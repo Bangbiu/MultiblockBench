@@ -23,7 +23,9 @@ import {
     BufferGeometry,
     BufferAttribute,
     Triangle,
-    Plane
+    Plane,
+    Box2,
+    Vector2
 } from 'three';
 import { Coplane, type EdgeLoop } from './SubGeometries';
 import type { BenchEdge, BenchFace, BenchVertex, ReferIterable } from './BenchGeometry';
@@ -124,7 +126,8 @@ class FacesGeometry extends BufferGeometry implements IndexedBufferGeometry {
  */
 class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
     declare public index: BufferAttribute;
-    public readonly plane: Plane;
+    public plane!: Plane;
+    public boundingBox2D!: Box2;
 
     /** Custom attribute name for in-plane 2D coords */
     public static readonly ATTR_POS2D = "pos2d";
@@ -135,17 +138,16 @@ class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
         // 1) Early out: empty selection
         if (coplane.size === 0) {
             this.plane = new Plane(new Vector3(0, 0, 1), 0);
+            this.boundingBox2D = new Box2();
             // keep empty geometry
             return;
         }
 
-        // 2) Gather triangles’ 3D positions (non-indexed first)
+        // 2) Gather triangles’ 3D positions
         const faceCount = coplane.size;
         const positions = new Float32Array(faceCount * 9);
         const uvs = new Float32Array(faceCount * 6);
         let ptr = 0;
-
-        this.plane = coplane.get(0).plane();
 
         for (const face of coplane.fetch()) {
             face.uvCoords(uvs, ptr * 6);
@@ -157,29 +159,7 @@ class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
         this.attributes.uv = new BufferAttribute(uvs, 2);
         this.setIndex(GeometryUtil.createSequentialIndicesAttr(faceCount * 3));
 
-        // 4) in-plane ONB
-        const n = this.plane.normal.clone().normalize();
-
-        // robust tangent selection
-        const pick = Math.abs(n.x) > 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
-        const t = new Vector3().crossVectors(n, pick).normalize();     // tangent in plane
-        const b = new Vector3().crossVectors(n, t).normalize();        // bitangent in plane
-
-        // 5) Project unique positions to plane & store pos2d
-        const posAttr = this.attributes.position as BufferAttribute;
-        const pos2d = new Float32Array(posAttr.count * 2);
-        const v = new Vector3();
-        const p = new Vector3();
-
-        for (let i = 0; i < posAttr.count; i++) {
-            v.fromBufferAttribute(posAttr, i);
-            // Project to plane, then to 2D basis
-            this.plane.projectPoint(v, p);
-            pos2d[i * 2 + 0] = p.dot(t);
-            pos2d[i * 2 + 1] = p.dot(b);
-        }
-
-        this.setAttribute(CoplaneGeometry.ATTR_POS2D, new BufferAttribute(pos2d, 2));
+        this.projectOn(coplane.plane);
 
         // Optional niceties
         this.computeVertexNormals();
@@ -188,6 +168,42 @@ class CoplaneGeometry extends BufferGeometry implements IndexedBufferGeometry {
 
     public get pos2DAttr() {
         return this.getAttribute(CoplaneGeometry.ATTR_POS2D);
+    }
+
+    public projectOn(plane: Plane): void {
+        this.plane = plane;
+        // in-plane ONB
+        const n = this.plane.normal.clone().normalize();
+        // robust tangent selection
+        const pick = Math.abs(n.x) > 0.9 ? new Vector3(0, 1, 0) : new Vector3(1, 0, 0);
+        const tangent = new Vector3().crossVectors(n, pick).normalize();
+        const bitangent = new Vector3().crossVectors(n, tangent).normalize();
+
+        // Project unique positions to plane & store pos2d
+        const posAttr = this.attributes.position as BufferAttribute;
+        const pos2dArr = new Float32Array(posAttr.count * 2);
+        const pos3d = new Vector3();
+        const pos2d = new Vector3();
+
+        for (let i = 0; i < posAttr.count; i++) {
+            pos3d.fromBufferAttribute(posAttr, i);
+            // Project to plane, then to 2D basis
+            this.plane.projectPoint(pos3d, pos2d);
+            pos2dArr[i * 2 + 0] = pos2d.dot(tangent);
+            pos2dArr[i * 2 + 1] = pos2d.dot(bitangent);
+        }
+
+        this.setAttribute(CoplaneGeometry.ATTR_POS2D, new BufferAttribute(pos2dArr, 2));
+        this.computeBoundingBox2D();
+    }
+
+    public computeBoundingBox2D(): void {
+        this.boundingBox2D = new Box2();
+        const point2D = new Vector2();
+        for (let i = 0; i < this.pos2DAttr.count; i++) {
+            point2D.fromBufferAttribute(this.pos2DAttr as BufferAttribute, i);
+            this.boundingBox2D.expandByPoint(point2D);
+        }
     }
 }
 
