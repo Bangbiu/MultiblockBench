@@ -26,8 +26,8 @@ type BenchIntersection = {
 class BenchModel extends Group {
     public selection: Selection;
     public benchMeshes: Set<BenchMesh>;
-    private _showWireframe: boolean = true;
-    private _hideMeshes: boolean = false;
+    private _wireframeVisible: boolean = true;
+    private _meshVisible: boolean = true;
 
     constructor() {
         super();
@@ -37,18 +37,18 @@ class BenchModel extends Group {
         this.scale.copy(window.config.scale);
     }
 
-    public get showWireframe() { return this._showWireframe; }
+    public get wireframeVisible() { return this.wireframeVisible; }
 
-    public set showWireframe(value: boolean) {
-        this._showWireframe = value;
-        this.benchMeshes.forEach(mesh => mesh.showWireframe(value));
+    public set wireframeVisible(value: boolean) {
+        this._wireframeVisible = value;
+        this.benchMeshes.forEach(mesh => mesh.wireframeVisible = value);
     }
 
-    public get hideMeshes() { return this._hideMeshes; }
+    public get meshVisible() { return this._meshVisible; }
 
-    public set hideMeshes(value: boolean) {
-        this._hideMeshes = value;
-        this.benchMeshes.forEach(mesh => mesh.visible = !value);
+    public set meshVisible(value: boolean) {
+        this._meshVisible = value;
+        this.benchMeshes.forEach(mesh => mesh.visible = value);
     }
 
     public add(...objs: Array<Object3D>): this {
@@ -107,8 +107,8 @@ class BenchModel extends Group {
     }
 
     public refresh() {
-        this.showWireframe = this._showWireframe;
-        this.hideMeshes = this._hideMeshes;
+        this.wireframeVisible = this._wireframeVisible;
+        this.meshVisible = this._meshVisible;
     }
 
     protected getClosestIntersection(raycaster: Raycaster): Opt<BenchIntersection> {
@@ -140,17 +140,13 @@ class BenchModel extends Group {
     public setOpacity(opacity: number) {
         this.benchMeshes.forEach(mesh => mesh.setOpacity(opacity));
     }
-
-    public extractSelected(): Opt<Mesh> {
-        return undefined;
-        //return this.selection.benchMesh.extractSubMesh(this.selection.coplane.subGeom);
-    }
 }
 
 class BenchMesh extends Group {
     private readonly wireframe: LineSegments;
     private readonly mesh: GeometryIndexedMesh;
     public readonly geometry: BenchGeometry;
+
     private constructor(loadedMesh: Mesh) {
         super();
         this.mesh = loadedMesh as GeometryIndexedMesh;
@@ -171,6 +167,9 @@ class BenchMesh extends Group {
         return (this.mesh.material as MeshPhongMaterial).map!;
     }
 
+    public get wireframeVisible() { return this.wireframe.visible; }
+    public set wireframeVisible(visible: boolean) { this.wireframe.visible = visible; }
+
     public async toIndexed() {
         const geometry = this.mesh.geometry;
         if (geometry.index) return;
@@ -185,12 +184,6 @@ class BenchMesh extends Group {
         // Wireframe overlay from same geometry
         this.wireframe.geometry = await GeometryUtil.run<WireframeGeometry>("createWireframe", this.mesh.geometry);
         //wireframe.material.depthTest = false; // makes it draw over the mesh
-    }
-
-    public showWireframe(state: boolean): boolean {
-        if (!this.wireframe) return false;
-        this.wireframe.visible = state;
-        return state;
     }
 
     public setOpacity(opacity: number) {

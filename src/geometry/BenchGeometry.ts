@@ -564,6 +564,15 @@ class BenchGeometry {
         if (!this.src) throw new Error("Need Source Geometry");
     }
 
+    public static async create(geometry: BufferGeometry) {
+
+    }
+
+    public static readonly ATTR_EDGE = "edge";
+    public static readonly ATTR_FACE = "face";
+    public static readonly ATTR_VERT_META = "vertMeta";
+    public static readonly ATTR_VERT_EDGES_POOL = "vertEdgesPool";
+    
 }
 
 export type {

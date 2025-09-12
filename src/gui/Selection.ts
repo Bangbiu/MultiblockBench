@@ -51,7 +51,7 @@ class Selection extends Group {
 
     public focusCamera(cam: Camera) {
         if (this.unavailable) return;
-        const tri = this.face!!.tri();
+        const tri = this.face!.tri();
         const center = tri.getMidpoint(new Vector3()).multiply(window.config.scale);
         const normal = tri.getNormal(new Vector3()).multiplyScalar(10);
         cam.position.copy(center).add(normal);

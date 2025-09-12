@@ -18,8 +18,6 @@ export async function test() {
     );
     const coplane = new Coplane(benchGeom.faceAt(0));
     const coplaneGeom = Primitives.coplane(coplane);
-    console.log(coplaneGeom.attributes.position);
-    console.log(coplaneGeom.plane);
     
 
     const mesh = await BenchMesh.create(defMesh(coplaneGeom));

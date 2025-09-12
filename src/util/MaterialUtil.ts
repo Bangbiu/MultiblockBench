@@ -81,10 +81,9 @@ class MaterialUtil {
      *
      * Returns a Canvas with the baked image.
      */
-    public static extractCoplaneImage(coplane: Coplane, texOrMat: Texture | Material, opts: ExtractOptions = {}): ImageData {
+    public static extractCoplaneImage(coplane: Coplane, tex: Texture, opts: ExtractOptions = {}): ImageData {
         // Resolve texture
-        const texture = resolveTexture(texOrMat);
-        if (!texture || !texture.image) {
+        if (!tex || !tex.image) {
             throw new Error("No valid Texture (material.map) with image provided.");
         }
         const geom = Primitives.coplane(coplane);
@@ -93,13 +92,13 @@ class MaterialUtil {
         const idx = geom.index;
 
         // Build a readable pixel buffer for the source texture
-        const srcCanvas = imageToCanvas(texture.image);
+        const srcCanvas = imageToCanvas(tex.image);
         const srcCtx = srcCanvas.getContext("2d", { willReadFrequently: true })!;
         const srcW = srcCanvas.width;
         const srcH = srcCanvas.height;
         const srcData = srcCtx.getImageData(0, 0, srcW, srcH);
         const srcPx = srcData.data;
-        const flipY = opts.flipY ?? texture.flipY ?? true;
+        const flipY = opts.flipY ?? tex.flipY ?? true;
 
         // Get bounds of 2D positions
         const bounds = geom.boundingBox2D;
@@ -219,14 +218,6 @@ class MaterialUtil {
 
         return outImg;
     }
-}
-
-// ---------- helpers ----------
-
-function resolveTexture(texOrMat: Texture | Material): Texture | null {
-    if ((texOrMat as Texture).isTexture) return texOrMat as Texture;
-    const mat = texOrMat as any;
-    return mat && mat.map && mat.map.isTexture ? (mat.map as Texture) : null;
 }
 
 function imageToCanvas(img: CanvasImageSource): HTMLCanvasElement {

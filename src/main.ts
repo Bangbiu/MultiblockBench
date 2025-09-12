@@ -9,6 +9,7 @@ import { bootstrap } from './config';
 import { BenchOutput } from './scene/BenchOutput';
 import { ContextMenu, type MenuDeclaration } from './gui/BenchMenu';
 import { test } from './test';
+import { BenchPen } from './gui/BenchPen';
 
 bootstrap();
 
@@ -26,6 +27,7 @@ class App {
     public readonly output: BenchOutput;
     // GUI
     public readonly menu: ContextMenu;
+    public readonly pen: BenchPen;
     public readonly objFileInput: HTMLInputElement;
     public readonly loadingUI: LoadingUI;
     
@@ -46,6 +48,8 @@ class App {
         // GUI
         this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
         this.loadingUI = new LoadingUI();
+        this.pen = new BenchPen(this.scene, this.camera, this.renderer.domElement); // grid = 1 unit
+        this.pen.enable();
         // Menu
         this.menu = new ContextMenu(this.menuSetting()).attach();
         App.INSTANCE = this;
@@ -71,17 +75,25 @@ class App {
     public menuSetting(): MenuDeclaration {
         return {
             "Load Object...": this.objFileInput.click.bind(this.objFileInput),
+            Mode: {
+                type: "subMenu",
+                menu: {
+                    Edit: "radio",
+                    Pen: "radio"
+                }
+            },
             Display: {
                 type: "subMenu",
                 menu: {
                     Wireframe: { 
                         type: "checkBox", 
                         checked: true,
-                        setter: (checked) => this.model.showWireframe = checked 
+                        setter: (checked) => this.model.wireframeVisible = checked 
                     },
-                    Hidden: { 
+                    Mesh: { 
                         type: "checkBox", 
-                        setter: (checked) => this.model.hideMeshes = checked,
+                        checked: true,
+                        setter: (checked) => this.model.meshVisible = checked,
                     }
                 }
             },

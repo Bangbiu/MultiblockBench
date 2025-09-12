@@ -251,25 +251,7 @@ class Coplane extends BenchSubGeometry {
     }
 
     public extract()  {
-        const geometry = GeometryUtil.extractSubGeometry(this);
-
-        const xAxis = new Vector3().subVectors(this.parent.vertAt(this.fetch()[0].a).pos(), this.origin).normalize();
-        const yAxis = new Vector3().crossVectors(this.plane.normal, xAxis).normalize();
-        const posVec = new Vector3();
-        const projected = new Vector3();
-        geometry.forEachPosition((pos) => {
-            // Project position to plane
-            // const worldPos = new Vector3().fromBufferAttribute(posAttr, globalIndex);
-            // const v = worldPos.clone().sub(this.origin);
-            // const x = v.dot(xAxis);
-            // const y = v.dot(yAxis);
-            // const z = 0;
-            posVec.fromArray(pos);
-            this.plane.projectPoint(posVec, projected);
-            projected.toArray(pos);
-        });
-
-        return geometry as IndexedBufferGeometry;
+        return Primitives.coplane(this);
     }
 }
 
