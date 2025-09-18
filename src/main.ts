@@ -9,7 +9,6 @@ import { bootstrap } from './config';
 import { BenchOutput } from './scene/BenchOutput';
 import { ContextMenu, type MenuDeclaration } from './gui/BenchMenu';
 import { test } from './test';
-import { BenchPen } from './gui/BenchPen';
 
 bootstrap();
 
@@ -27,7 +26,7 @@ class App {
     public readonly output: BenchOutput;
     // GUI
     public readonly menu: ContextMenu;
-    public readonly pen: BenchPen;
+    //public readonly pen: BenchPen;
     public readonly objFileInput: HTMLInputElement;
     public readonly loadingUI: LoadingUI;
     
@@ -48,8 +47,8 @@ class App {
         // GUI
         this.objFileInput = App.loadElement("objLoader") as HTMLInputElement;
         this.loadingUI = new LoadingUI();
-        this.pen = new BenchPen(this.scene, this.camera, this.renderer.domElement); // grid = 1 unit
-        this.pen.enable();
+        //this.pen = new BenchPen(this.scene, this.camera, this.renderer.domElement); // grid = 1 unit
+        //this.pen.enable();
         // Menu
         this.menu = new ContextMenu(this.menuSetting()).attach();
         App.INSTANCE = this;
@@ -75,13 +74,6 @@ class App {
     public menuSetting(): MenuDeclaration {
         return {
             "Load Object...": this.objFileInput.click.bind(this.objFileInput),
-            Mode: {
-                type: "subMenu",
-                menu: {
-                    Edit: "radio",
-                    Pen: "radio"
-                }
-            },
             Display: {
                 type: "subMenu",
                 menu: {
@@ -110,9 +102,6 @@ class App {
                 type: "subMenu",
                 menu: {
                     Texture: this.selection.extractSubMesh,
-                    idk: {type: "subMenu", menu: {idk: "option"}},
-                    radio1: "radio",
-                    slider1: "slider"
                 }
             },
             test: test

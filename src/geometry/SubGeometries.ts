@@ -12,7 +12,7 @@ import {
     GeometryUtil,
     Line3D,
 } from "./GeometryUtil";
-import { Primitives, type IndexedBufferGeometry } from "./Primitives";
+import { Primitives } from "./Primitives";
 
 class ReferMesh extends Mesh {
     public readonly boundary: LineSegments;

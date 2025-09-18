@@ -1,19 +1,11 @@
 import { 
     AxesHelper, 
     BoxGeometry, 
-    CatmullRomCurve3, 
-    DoubleSide, 
-    ExtrudeGeometry, 
     GridHelper, 
     Group, 
     Mesh, 
-    MeshBasicMaterial, 
     MeshStandardMaterial, 
-    PlaneGeometry, 
-    Shape, 
-    TubeGeometry, 
-    Vector2, 
-    Vector3
+    PlaneGeometry
 } from "three";
 
 
