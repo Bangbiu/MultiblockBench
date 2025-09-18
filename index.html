@@ -1,20 +1,27 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>MultiblockBench</title>
-    <style>
-      body {
-        margin: 0;
-        overflow: hidden;
-      }
-      canvas {
-        display: block;
-      }
-    </style>
-    <script type="module" crossorigin src="/MultiblockBench/assets/index-Bj2SrKjE.js"></script>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>MultiblockBench</title>
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" />
+    <script type="module" crossorigin src="/MultiblockBench/assets/index-Ce_IwE3V.js"></script>
+    <link rel="stylesheet" crossorigin href="/MultiblockBench/assets/index-Cws8Okk0.css">
   </head>
+
   <body>
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay">
+        <div class="loadingContent">
+            <div class="spinner"></div>
+            <div class="progressBarContainer">
+            <div class="progressBar" id="progressBar"></div>
+            </div>
+            <div class="loadingText" id="progressLabel">Loading 0%</div>
+        </div>
+    </div>
+    <input type="file" id="objLoader" multiple/>
+
+    <!-- Three.js Script -->
   </body>
 </html>
